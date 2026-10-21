@@ -16,6 +16,8 @@ public partial class NewsView : UserControl
     private RssService? _rss;
     private bool _loaded; // 实例复用安全网：页面被缓存复用时不重复初始化
 
+    private CancellationTokenSource? _cts; // 页面被切走时取消 pending 请求，防止对已脱离视觉树的控件回写
+
     public NewsView()
     {
         InitializeComponent();
@@ -24,6 +26,7 @@ public partial class NewsView : UserControl
         var sp = AppServiceLocator.Services;
         _rss = sp?.GetService<RssService>();
         sourceHint.Text = "来源：SCS Blog（feedburner）";
+        Unloaded += (_, _) => _cts?.Cancel(); // 离开页面即取消未完成的加载
         _ = LoadAsync();
     }
 
@@ -63,16 +66,23 @@ public partial class NewsView : UserControl
             return;
         }
 
+        // 取消上一次未完成的加载（切 tab / 刷新时避免并发叠加）
+        _cts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _cts = cts;
+
         loadingHint.IsVisible = true;
         emptyHint.IsVisible = false;
         btnRefresh.IsEnabled = false;
 
         try
         {
-            var items = await _rss.GetItemsAsync(_tab, take: 30);
+            var items = await _rss.GetItemsAsync(_tab, take: 30, ct: cts.Token);
+            if (cts.IsCancellationRequested) return; // 页面已切走，不再回写 UI
             list.ItemsSource = items;
             emptyHint.IsVisible = items.Count == 0;
         }
+        catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
             emptyHint.IsVisible = true;
@@ -80,8 +90,11 @@ public partial class NewsView : UserControl
         }
         finally
         {
-            loadingHint.IsVisible = false;
-            btnRefresh.IsEnabled = true;
+            if (!cts.IsCancellationRequested)
+            {
+                loadingHint.IsVisible = false;
+                btnRefresh.IsEnabled = true;
+            }
         }
     }
 }

@@ -18,11 +18,6 @@ public partial class MainWindow : Window
     private ShellViewModel? _shell;
     private AuthService? _auth;
     private BrandingService? _branding;
-    // 导航防抖：快速连点侧边栏会重复 new 页面（Profile/News 构造即 fire-and-forget 异步加载），
-    // 堆积大量并发异步任务 + 内存膨胀 → UI 卡死。300ms 内的连点直接忽略。
-    private bool _navigating;
-    private int _lastNavTs;
-
     public MainWindow()
     {
         InitializeComponent();
@@ -81,21 +76,23 @@ public partial class MainWindow : Window
     /// <summary>导航到指定页（home/news/settings/admin/profile）。开发模式 --navigate= 用它直达某页做诊断/截图。</summary>
     public void NavigateTo(string key) => ShowPage(key);
 
-    // 页面实例复用：同页不重复 new（Profile/News 构造即 fire-and-forget 异步加载，
-    // 反复 new 会堆积并发异步任务 + 内存膨胀 → 快速连点时 UI 卡死）。
-    private readonly Dictionary<string, Control> _pageCache = new();
+    // 导航防抖：快速连点侧边栏会在 100ms 内创建多个页面实例（Profile/News 构造即
+    // fire-and-forget 发 HTTP），堆积并发异步任务 + HttpClient 句柄 → UI 卡死。
+    // 300ms 内的连点直接忽略，只响应"有效"的一次点击。
+    // （不用页面缓存：缓存会永久持有实例及其 HTTP 任务/句柄，本身就会泄漏，方向错误。）
+    private int _lastNavTs;
 
     private void ShowPage(string key)
     {
+        var now = Environment.TickCount;
+        if (now - _lastNavTs < 300)
+            return;
+        _lastNavTs = now;
+
         _shell.ActiveNav = key;
         UpdateNavVisibility();
         UpdateNavActive(key);
-        if (!_pageCache.TryGetValue(key, out var page))
-        {
-            page = CreatePage(key);
-            _pageCache[key] = page;
-        }
-        contentHost.Content = page;
+        contentHost.Content = CreatePage(key);
     }
 
     /// <summary>

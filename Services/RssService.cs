@@ -141,44 +141,81 @@ public sealed class RssService
         return string.IsNullOrWhiteSpace(env) ? DefaultFeed : env!;
     }
 
-    /// <summary>解析 RSS 2.0 XML → RssItem 列表。</summary>
+    /// <summary>
+    /// 解析 RSS 2.0（&lt;item&gt;）或 Atom（&lt;entry&gt;）→ RssItem 列表。
+    /// feedburner 的 SCS Blog 现返回 **Atom**（命名空间 http://www.w3.org/2005/Atom，
+    /// 条目 &lt;entry&gt;、链接在 &lt;link href&gt;、标签在 &lt;category term&gt;、正文 &lt;content type='html'&gt;），
+    /// 早期 RSS 2.0 源（&lt;item&gt;/&lt;link&gt;/&lt;description&gt;/&lt;pubDate&gt;）也需兼容。
+    /// </summary>
     internal static List<RssItem> ParseRss(string xml, string defaultGame)
     {
         var items = new List<RssItem>();
         try
         {
             var doc = XDocument.Parse(xml);
-            foreach (var item in doc.Descendants("item").Take(50))
-            {
-                var title = item.Element("title")?.Value?.Trim() ?? "";
-                var link = item.Element("link")?.Value?.Trim() ?? "";
-                var desc = item.Element("description")?.Value?.Trim() ?? "";
-                var pubDate = item.Element("pubDate")?.Value?.Trim() ?? "";
+            // Atom 命名空间（本地名匹配用 LocalName，避免命名空间前缀问题）
+            var isAtom = doc.Root?.Name.LocalName == "feed";
 
+            // 统一取本地名子元素值
+            string Local(XElement? parent, string name) =>
+                parent?.Elements().FirstOrDefault(e => e.Name.LocalName == name)?.Value?.Trim() ?? "";
+
+            IEnumerable<XElement> entries = isAtom
+                ? doc.Descendants().Where(e => e.Name.LocalName == "entry")
+                : doc.Descendants().Where(e => e.Name.LocalName == "item");
+
+            foreach (var item in entries.Take(50))
+            {
+                var title = Local(item, "title");
+
+                // 链接：RSS <link>text</link>；Atom <link href="..."/>（取 rel≠alternate 的第一个，或第一个）
+                string link = "";
+                var linkEl = item.Elements().FirstOrDefault(e => e.Name.LocalName == "link");
+                if (linkEl != null)
+                {
+                    var href = linkEl.Attribute("href")?.Value;
+                    link = string.IsNullOrWhiteSpace(href) ? (linkEl.Value ?? "") : href;
+                }
+
+                // 正文：RSS <description>；Atom <content type='html'> 或 <summary>
+                string body = "";
+                var contentEl = item.Elements().FirstOrDefault(e =>
+                    e.Name.LocalName is "content" or "summary" or "description");
+                body = contentEl?.Value?.Trim() ?? "";
+                if (string.IsNullOrEmpty(body)) body = Local(item, "description");
+
+                // 日期：RSS <pubDate>；Atom <published>/<updated>
+                var pubDate = Local(item, "pubDate")
+                    ?? Local(item, "published")
+                    ?? Local(item, "updated");
                 DateTime date;
                 if (DateTime.TryParse(pubDate, out var d)) date = d;
                 else if (DateTime.TryParseExact(pubDate, "R", null, System.Globalization.DateTimeStyles.None, out d)) date = d;
                 else date = DateTime.Now;
 
-                // 推断游戏：标题含 ATS/American → ats，含 ETS/Euro → ets2
+                // 推断游戏：优先 Atom <category term>（"Euro Truck Simulator 2"/"American Truck Simulator"），
+                // 回退标题关键词
                 var game = defaultGame;
-                var lower = title.ToLowerInvariant();
-                if (lower.Contains("american") || lower.Contains("ats ")) game = "ats";
-                else if (lower.Contains("euro") || lower.Contains("ets2")) game = "ets2";
+                var cats = string.Join(" ", item.Elements()
+                    .Where(e => e.Name.LocalName == "category")
+                    .Select(e => e.Attribute("term")?.Value ?? e.Value ?? ""));
+                var lower = (title + " " + cats).ToLowerInvariant();
+                if (lower.Contains("american truck") || lower.Contains(" ats")) game = "ats";
+                else if (lower.Contains("euro truck") || lower.Contains("ets2")) game = "ets2";
 
-                // 提取版本标签：匹配 "1.61" "1.60" 等模式
+                // 提取版本标签：匹配 "1.61" "1.60" 等
                 string? versionTag = null;
-                var verMatch = System.Text.RegularExpressions.Regex.Match(title + " " + desc, @"\b(\d+\.\d+)\b");
+                var verMatch = System.Text.RegularExpressions.Regex.Match(title + " " + body, @"\b(\d+\.\d+)\b");
                 if (verMatch.Success) versionTag = verMatch.Groups[1].Value;
 
-                // 清理 description 中的 HTML 标签
-                var summary = System.Text.RegularExpressions.Regex.Replace(desc, "<[^>]+>", "").Trim();
+                // 清理正文 HTML 标签 + 解码实体（&amp; &lt; &nbsp; 等）
+                var summary = StripHtml(body);
                 if (summary.Length > 200) summary = summary[..200] + "…";
 
                 items.Add(new RssItem
                 {
                     Title = title,
-                    Link = link,
+                    Link = link.Trim(),
                     Summary = string.IsNullOrWhiteSpace(summary) ? null : summary,
                     PublishedAt = date,
                     GameVersionTag = versionTag,
@@ -188,9 +225,19 @@ public sealed class RssService
         }
         catch (Exception ex)
         {
-            // XML 解析失败：返回空列表
             System.Diagnostics.Debug.WriteLine($"RSS parse error: {ex.Message}");
         }
         return items;
+    }
+
+    /// <summary>去 HTML 标签 + 解码常见实体 + 折叠空白。</summary>
+    private static string StripHtml(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        var t = System.Text.RegularExpressions.Regex.Replace(s, "<[^>]+>", " ");
+        t = t.Replace("&nbsp;", " ").Replace("&amp;", "&")
+             .Replace("&lt;", "<").Replace("&gt;", ">").Replace("&quot;", "\"").Replace("&#39;", "'");
+        t = System.Text.RegularExpressions.Regex.Replace(t, @"\s+", " ").Trim();
+        return t;
     }
 }

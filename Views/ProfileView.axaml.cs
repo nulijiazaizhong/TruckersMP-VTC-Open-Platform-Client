@@ -17,7 +17,8 @@ public partial class ProfileView : UserControl
     private IApiClient? _api;
     private AuthService? _auth;
 
-    private bool _loaded; // 实例复用安全网：页面被缓存复用时不重复打 API（构造只在首次执行）
+    private bool _loaded; // 构造去重
+    private volatile bool _disposed; // 页面切走后停止回写 UI（防对已脱离视觉树的控件赋值）
 
     public ProfileView()
     {
@@ -28,6 +29,7 @@ public partial class ProfileView : UserControl
         _api = sp?.GetService<IApiClient>();
         _auth = sp?.GetService<AuthService>();
         var settings = sp?.GetService<AppSettings>();
+        Unloaded += (_, _) => _disposed = true; // 离开页面即标记，pending 请求结果不再回写
 
         fUsername.Text = _auth?.CurrentUsername ?? "—";
         fRole.Text = _auth?.CurrentRole ?? "—";
@@ -51,6 +53,7 @@ public partial class ProfileView : UserControl
         {
             var logs = await _api.GetAsync<PageResult<EventLogDto>>(VtcApi.EventLogs,
                 new Dictionary<string, string?> { ["take"] = "20", ["skip"] = "0" });
+            if (_disposed) return; // 页面已切走
             if (logs?.Items is { Count: > 0 })
             {
                 var items = new ObservableCollection<EventLogItem>();
@@ -74,6 +77,7 @@ public partial class ProfileView : UserControl
         {
             var lb = await _api.GetAsync<LeaderboardDto>(VtcApi.Leaderboard,
                 new Dictionary<string, string?> { ["take"] = "10", ["skip"] = "0" }, useAuth: false);
+            if (_disposed) return; // 页面已切走
             if (lb?.Items is { Count: > 0 })
             {
                 var entries = new ObservableCollection<LbEntry>();
