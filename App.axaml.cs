@@ -73,6 +73,14 @@ public class App : Application
             .WriteTo.Console()
             .CreateLogger();
 
+        // 全局 UI 线程未处理异常捕获：写完整堆栈到日志（否则崩溃直接终止进程、无异常可查）。
+        // 挂在 UI 线程 Dispatcher 上（实例事件）；不阻止异常（仅记录），便于诊断。
+        Avalonia.Threading.Dispatcher.UIThread.UnhandledException += (_, e) =>
+        {
+            Logging.Serilog?.Fatal(e.Exception, "【未处理异常·崩溃】");
+            System.Diagnostics.Debug.WriteLine("【未处理异常】" + e.Exception);
+        };
+
         // 3) DI（应用级单例）
         var services = new ServiceCollection();
         services.AddSingleton(Config);
