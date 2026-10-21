@@ -42,8 +42,10 @@ public sealed class RssService
         public string Title { get; set; } = "";
         public string Link { get; set; } = "";
         public string? Summary { get; set; }
-        /// <summary>完整正文（去 HTML 标签、保留段落换行、不截断）——详情页内嵌显示用。</summary>
+        /// <summary>完整正文（去 HTML 标签、保留段落换行、不截断）——纯文本回退用。</summary>
         public string? Body { get; set; }
+        /// <summary>原始正文 HTML（含 &lt;img src&gt; 等标签）——详情页渲染真实图片用。</summary>
+        public string? RawHtml { get; set; }
         public DateTime PublishedAt { get; set; }
         /// <summary>游戏版本标签（如 "1.61"），用于过滤。</summary>
         public string? GameVersionTag { get; set; }
@@ -227,6 +229,7 @@ public sealed class RssService
                     Link = link.Trim(),
                     Summary = string.IsNullOrWhiteSpace(summary) ? null : summary,
                     Body = string.IsNullOrWhiteSpace(full) ? null : full,
+                    RawHtml = string.IsNullOrWhiteSpace(body) ? null : body, // 原始 HTML，详情页渲染图片
                     PublishedAt = date,
                     GameVersionTag = versionTag,
                     Game = game,

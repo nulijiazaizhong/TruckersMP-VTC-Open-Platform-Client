@@ -44,10 +44,9 @@
         <Button x:Name="btnBrowser" Content="在浏览器打开原文 ↗" HorizontalAlignment="Left"
                 Width="160" Height="32" Margin="0,0,0,16"
                 Click="OnBrowserClick"/>
-        <!-- 正文（HTML → 富文本） -->
+        <!-- 正文：StackPanel，C# 里把 HTML 解析为 TextBlock 段落 + Image 图片（图片真实渲染，非链接） -->
         <Border Background="#1E1E22" CornerRadius="8" Padding="16,14">
-          <TextBlock x:Name="detailBody" FontSize="13" Foreground="#CCC"
-                     TextWrapping="Wrap" LineHeight="22"/>
+          <StackPanel x:Name="detailBody"/>
         </Border>
       </StackPanel>
     </ScrollViewer>

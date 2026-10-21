@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Microsoft.Extensions.DependencyInjection;
@@ -76,10 +78,127 @@ public partial class NewsView : UserControl
         detailDate.Text = item.DateText;
         detailVersion.Text = string.IsNullOrWhiteSpace(item.GameVersionTag)
             ? "" : $"版本 {item.GameVersionTag}";
-        detailBody.Text = item.DisplayBody;
+        RenderBody(item);
         list.IsVisible = false;
         emptyHint.IsVisible = false;
         detailPanel.IsVisible = true;
+    }
+
+    /// <summary>
+    /// 把文章正文渲染进 detailBody（StackPanel）：文本段落 → TextBlock，
+    /// &lt;img src&gt; → 真实 Image 控件（异步加载 URL）。优先用 RawHtml（含 img 标签），
+    /// 无则回退纯文本 Body。
+    /// </summary>
+    private void RenderBody(RssItem item)
+    {
+        detailBody.Children.Clear();
+        var html = item.RawHtml;
+
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            // 无 HTML：纯文本回退
+            var txt = new TextBlock
+            {
+                Text = item.DisplayBody,
+                FontSize = 13,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
+                TextWrapping = TextWrapping.Wrap,
+                LineHeight = 22,
+                Margin = new Thickness(0, 0, 0, 8),
+            };
+            detailBody.Children.Add(txt);
+            return;
+        }
+
+        // 按 <img> 标签切分：图片之间的文本段 + 图片本身，按原始顺序排布
+        // 匹配 <img ... src="..." ...>（单/双引号、属性顺序不定）
+        var imgRegex = new System.Text.RegularExpressions.Regex(
+            @"<img\b[^>]*?\bsrc\s*=\s*([""'])(.*?)\1[^>]*?>",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        var pos = 0;
+        foreach (System.Text.RegularExpressions.Match m in imgRegex.Matches(html))
+        {
+            // 图片前的文本段
+            if (m.Index > pos)
+                AddTextBlock(detailBody, StripHtmlText(html.Substring(pos, m.Index - pos)));
+            // 图片本身
+            AddImage(detailBody, m.Groups[2].Value);
+            pos = m.Index + m.Length;
+        }
+        // 尾部剩余文本
+        if (pos < html.Length)
+            AddTextBlock(detailBody, StripHtmlText(html.Substring(pos)));
+    }
+
+    private static void AddTextBlock(Avalonia.Controls.StackPanel host, string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return;
+        host.Children.Add(new TextBlock
+        {
+            Text = text,
+            FontSize = 13,
+            Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
+            TextWrapping = TextWrapping.Wrap,
+            LineHeight = 22,
+            Margin = new Thickness(0, 0, 0, 10),
+        });
+    }
+
+    private static void AddImage(Avalonia.Controls.StackPanel host, string src)
+    {
+        if (string.IsNullOrWhiteSpace(src)) return;
+        if (!src.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+        {
+            // 相对路径：SCS Blog 图片一般是绝对 URL；若相对则跳过（避免无效加载）
+            return;
+        }
+        var img = new Image
+        {
+            Stretch = Stretch.Uniform,
+            MaxHeight = 420,
+            MinHeight = 40, // 加载前占位高度，避免空白跳动
+            Margin = new Thickness(0, 0, 0, 12),
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        // 异步加载远程图片（Bitmap 从 URI 异步，不阻塞 UI）
+        _ = LoadImageAsync(img, src);
+        host.Children.Add(img);
+    }
+
+    private static async System.Threading.Tasks.Task LoadImageAsync(Image img, string url)
+    {
+        try
+        {
+            using var http = new System.Net.Http.HttpClient { Timeout = System.TimeSpan.FromSeconds(20) };
+            var bytes = await http.GetByteArrayAsync(url);
+            using var ms = new System.IO.MemoryStream(bytes);
+            var bmp = new Avalonia.Media.Imaging.Bitmap(ms);
+            // 回到 UI 线程赋值
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => img.Source = bmp);
+        }
+        catch
+        {
+            // 图片加载失败：移除占位（或保留灰块），不中断
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                img.Source = null;
+                img.Height = 0;
+            });
+        }
+    }
+
+    /// <summary>轻量去 HTML 标签（详情页文本段用，保留换行）。</summary>
+    private static string StripHtmlText(string html)
+    {
+        if (string.IsNullOrEmpty(html)) return "";
+        var t = System.Text.RegularExpressions.Regex.Replace(html, @"</?(p|div|br|ul|ol|li|h[1-6])[^>]*>", "\n");
+        t = System.Text.RegularExpressions.Regex.Replace(t, @"<[^>]+>", "");
+        t = t.Replace("&nbsp;", " ").Replace("&amp;", "&")
+             .Replace("&lt;", "<").Replace("&gt;", ">").Replace("&quot;", "\"").Replace("&#39;", "'");
+        t = System.Text.RegularExpressions.Regex.Replace(t, @"[ \t]+", " ");
+        t = System.Text.RegularExpressions.Regex.Replace(t, @"\n{3,}", "\n\n");
+        return t.Trim();
     }
 
     // 返回资讯列表
