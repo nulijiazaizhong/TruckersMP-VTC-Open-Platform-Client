@@ -28,7 +28,31 @@
                Foreground="#999" HorizontalAlignment="Center" Margin="0,40"
                IsVisible="False"/>
 
-    <!-- 资讯列表（当前 tab 的游戏） -->
+    <!-- ===== 文章详情面板（点击条目后显示，列表隐藏）===== -->
+    <ScrollViewer x:Name="detailPanel" IsVisible="False">
+      <StackPanel MaxWidth="820" HorizontalAlignment="Left">
+        <Button x:Name="btnBack" Content="← 返回列表" HorizontalAlignment="Left"
+                Width="120" Height="32" Margin="0,0,0,14"
+                Click="OnBackClick" Foreground="#888"/>
+        <TextBlock x:Name="detailTitle" FontSize="19" FontWeight="Bold"
+                   Foreground="#F0F0F0" TextWrapping="Wrap" Margin="0,0,0,8"/>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+          <TextBlock x:Name="detailDate" FontSize="12" Foreground="#888"/>
+          <TextBlock x:Name="detailVersion" FontSize="12" Foreground="#666"
+                     Margin="10,0,0,0"/>
+        </StackPanel>
+        <Button x:Name="btnBrowser" Content="在浏览器打开原文 ↗" HorizontalAlignment="Left"
+                Width="160" Height="32" Margin="0,0,0,16"
+                Click="OnBrowserClick"/>
+        <!-- 正文（HTML → 富文本） -->
+        <Border Background="#1E1E22" CornerRadius="8" Padding="16,14">
+          <TextBlock x:Name="detailBody" FontSize="13" Foreground="#CCC"
+                     TextWrapping="Wrap" LineHeight="22"/>
+        </Border>
+      </StackPanel>
+    </ScrollViewer>
+
+    <!-- ===== 资讯列表（当前 tab 的游戏）===== -->
     <ItemsControl x:Name="list">
       <ItemsControl.ItemTemplate>
         <DataTemplate>
@@ -48,7 +72,7 @@
                 <TextBlock Text="{Binding Summary}" FontSize="12" Foreground="#999"
                            TextWrapping="Wrap" Margin="0,4,0,0"
                            IsVisible="{Binding HasSummary}"/>
-                <TextBlock x:Name="detailHint" Text="点击查看详情 →" FontSize="11"
+                <TextBlock x:Name="detailHint" Text="点击阅读全文 →" FontSize="11"
                            Foreground="#5a8fc7" Margin="0,4,0,0"/>
               </StackPanel>
             </DockPanel>

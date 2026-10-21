@@ -42,10 +42,12 @@ public partial class NewsView : UserControl
         if (sender is not Button { Tag: string tag }) return;
         _tab = tag;
         var accent = App.Current.Resources["vtc_accent"] as IBrush ?? new SolidColorBrush(Color.FromRgb(30, 136, 229));
+        // 高亮：当前 tab 用 accent 背景 + 白字；非当前 tab 透明背景 + 灰字。
+        // 注意前景必须是 White（不能是 accent）——否则文字与背景同色，按钮"消失"。
         tabEts2.Background = tag == "ets2" ? accent : Brushes.Transparent;
         tabEts2.Foreground = tag == "ets2" ? Brushes.White : new SolidColorBrush(Color.FromRgb(187, 187, 187));
         tabAts.Background = tag == "ats" ? accent : Brushes.Transparent;
-        tabAts.Foreground = tag == "ats" ? accent : new SolidColorBrush(Color.FromRgb(187, 187, 187));
+        tabAts.Foreground = tag == "ats" ? Brushes.White : new SolidColorBrush(Color.FromRgb(187, 187, 187));
         sourceHint.Text = tag == "ets2" ? "来源：SCS Blog · 欧卡" : "来源：SCS Blog · 美卡";
         ApplyCurrentTab();
     }
@@ -64,11 +66,34 @@ public partial class NewsView : UserControl
         _ = LoadAsync();
     }
 
-    // 点击条目 → 系统浏览器打开详情页
+    // 点击条目 → 内嵌显示详情（不跳浏览器）；"在浏览器打开"按钮可选跳转原文
+    private RssItem? _current;
     private void OnItemPressed(object? sender, PointerPressedEventArgs e)
     {
         if (sender is not Control { Tag: RssItem item }) return;
-        OpenInBrowser(item.Link);
+        _current = item;
+        detailTitle.Text = item.Title;
+        detailDate.Text = item.DateText;
+        detailVersion.Text = string.IsNullOrWhiteSpace(item.GameVersionTag)
+            ? "" : $"版本 {item.GameVersionTag}";
+        detailBody.Text = item.DisplayBody;
+        list.IsVisible = false;
+        emptyHint.IsVisible = false;
+        detailPanel.IsVisible = true;
+    }
+
+    // 返回资讯列表
+    private void OnBackClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        detailPanel.IsVisible = false;
+        list.IsVisible = true;
+        emptyHint.IsVisible = (_tab == "ets2" ? _ets : _ats).Count == 0;
+    }
+
+    // 在浏览器打开当前文章原文
+    private void OnBrowserClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_current != null) OpenInBrowser(_current.Link);
     }
 
     private static void OpenInBrowser(string url)
@@ -89,8 +114,15 @@ public partial class NewsView : UserControl
     /// <summary>把当前 tab 对应的列表绑定到 list（数据来自 _ets/_ats 缓存）。</summary>
     private void ApplyCurrentTab()
     {
+        // 切 tab / 刷新时若正开着详情，先回到列表视图
+        if (detailPanel.IsVisible)
+        {
+            detailPanel.IsVisible = false;
+            list.IsVisible = true;
+        }
         var items = _tab == "ets2" ? _ets : _ats;
         list.ItemsSource = items;
+        list.IsVisible = true;
         emptyHint.IsVisible = items.Count == 0;
         if (emptyHint.IsVisible)
             emptyHint.Text = _tab == "ets2" ? "暂无欧卡资讯" : "暂无美卡资讯";

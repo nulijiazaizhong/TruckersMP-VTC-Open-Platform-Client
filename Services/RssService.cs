@@ -42,6 +42,8 @@ public sealed class RssService
         public string Title { get; set; } = "";
         public string Link { get; set; } = "";
         public string? Summary { get; set; }
+        /// <summary>完整正文（去 HTML 标签、保留段落换行、不截断）——详情页内嵌显示用。</summary>
+        public string? Body { get; set; }
         public DateTime PublishedAt { get; set; }
         /// <summary>游戏版本标签（如 "1.61"），用于过滤。</summary>
         public string? GameVersionTag { get; set; }
@@ -51,6 +53,11 @@ public sealed class RssService
         public string DateText => PublishedAt.ToLocalTime().ToString("yyyy-MM-dd");
         /// <summary>XAML 绑定：摘要是否可见。</summary>
         public bool HasSummary => !string.IsNullOrWhiteSpace(Summary);
+        /// <summary>详情页显示用正文：优先 Body，回退 Summary，再回退提示。</summary>
+        public string DisplayBody =>
+            !string.IsNullOrWhiteSpace(Body) ? Body
+            : !string.IsNullOrWhiteSpace(Summary) ? Summary!
+            : "（此源未提供正文，请在浏览器打开原文查看完整内容）";
     }
 
     /// <summary>默认 SCS Blog feedburner 源。</summary>
@@ -209,7 +216,9 @@ public sealed class RssService
                 if (verMatch.Success) versionTag = verMatch.Groups[1].Value;
 
                 // 清理正文 HTML 标签 + 解码实体（&amp; &lt; &nbsp; 等）
-                var summary = StripHtml(body);
+                // Body：完整正文（保留段落换行，详情页用）；Summary：截断 200 字（列表用）
+                var full = StripHtml(body, preserveBlocks: true);
+                var summary = StripHtml(body, preserveBlocks: false);
                 if (summary.Length > 200) summary = summary[..200] + "…";
 
                 items.Add(new RssItem
@@ -217,6 +226,7 @@ public sealed class RssService
                     Title = title,
                     Link = link.Trim(),
                     Summary = string.IsNullOrWhiteSpace(summary) ? null : summary,
+                    Body = string.IsNullOrWhiteSpace(full) ? null : full,
                     PublishedAt = date,
                     GameVersionTag = versionTag,
                     Game = game,
@@ -230,14 +240,39 @@ public sealed class RssService
         return items;
     }
 
-    /// <summary>去 HTML 标签 + 解码常见实体 + 折叠空白。</summary>
-    private static string StripHtml(string s)
+    /// <summary>去 HTML 标签 + 解码常见实体 + 折叠空白。
+    /// preserveBlocks=true 时把块级标签（p/br/div/ul/li/h1-h6）转换行、保留段落结构（详情页用）。</summary>
+    private static string StripHtml(string s, bool preserveBlocks = false)
     {
         if (string.IsNullOrEmpty(s)) return "";
-        var t = System.Text.RegularExpressions.Regex.Replace(s, "<[^>]+>", " ");
+        var t = s;
+        if (preserveBlocks)
+        {
+            // 块级结束 → 换行；<br> → 换行；列表项 → "• " 前缀
+            t = System.Text.RegularExpressions.Regex.Replace(t,
+                @"</?(p|div|ul|ol|h[1-6]|blockquote|table|tr)[^>]*>", "\n");
+            t = System.Text.RegularExpressions.Regex.Replace(t, @"<li[^>]*>", "\n• ");
+            t = System.Text.RegularExpressions.Regex.Replace(t, @"<br\s*/?>", "\n");
+        }
+        else
+        {
+            t = System.Text.RegularExpressions.Regex.Replace(t, @"<[^>]+>", " ");
+        }
+        // 解码常见实体
         t = t.Replace("&nbsp;", " ").Replace("&amp;", "&")
              .Replace("&lt;", "<").Replace("&gt;", ">").Replace("&quot;", "\"").Replace("&#39;", "'");
-        t = System.Text.RegularExpressions.Regex.Replace(t, @"\s+", " ").Trim();
+        if (preserveBlocks)
+        {
+            // 折叠行内空白（保留换行）
+            t = System.Text.RegularExpressions.Regex.Replace(t, @"[ \t]+", " ");
+            t = System.Text.RegularExpressions.Regex.Replace(t, @" ?\n ?", "\n");
+            t = System.Text.RegularExpressions.Regex.Replace(t, @"\n{3,}", "\n\n");
+            t = t.Trim();
+        }
+        else
+        {
+            t = System.Text.RegularExpressions.Regex.Replace(t, @"\s+", " ").Trim();
+        }
         return t;
     }
 }
