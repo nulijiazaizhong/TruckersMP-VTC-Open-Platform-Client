@@ -40,6 +40,7 @@ public partial class ProfileView : UserControl
         var settings = sp?.GetService<AppSettings>();
         Unloaded += (_, _) => _disposed = true; // 离开页面即标记，pending 请求结果不再回写
 
+        Log("构造·开始填字段");
         fUsername.Text = _auth?.CurrentUsername ?? "—";
         fRole.Text = _auth?.CurrentRole ?? "—";
         fPlate.Text = string.IsNullOrWhiteSpace(_auth?.Plate) ? "—" : _auth!.Plate;
@@ -50,22 +51,33 @@ public partial class ProfileView : UserControl
             ? "（无已部署活动存档）"
             : $"profile：{settings.ActiveEventProfile}\nDLC 备份：{settings.ActiveDlcStashDir ?? "—"}";
 
+        Log("构造·即将 LoadAsync");
         _ = LoadAsync();
     }
 
+    private static void Log(string msg) =>
+        VTC.Client.Logging.Serilog?.Information("【ProfileView】{M}", msg);
+
     private async Task LoadAsync()
     {
-        if (_api == null) return;
+        if (_api == null) { Log("LoadAsync：_api 为空，退出"); return; }
+        Log("LoadAsync·开始");
 
         // 兜底：整个加载流程任何未预料的异常（含 UI 回写时控件已卸载）都写日志，
         // 绝不抛到 UI 线程导致崩溃。
         try
         {
+            // ①② 并行发起两个请求（避免串行放大等待；HttpClient 超时 20s，
+            // 挂起时 Task.WhenAll 也会超时抛错，由各自 catch 接管显示"加载失败"）。
+            var tLogs = _api.GetAsync<PageResult<EventLogDto>>(VtcApi.EventLogs,
+                new Dictionary<string, string?> { ["take"] = "20", ["skip"] = "0" });
+            var tLb = _api.GetAsync<LeaderboardDto>(VtcApi.Leaderboard,
+                new Dictionary<string, string?> { ["take"] = "10", ["skip"] = "0" }, useAuth: false);
+
             // ① 活动记录（C7）
             try
             {
-                var logs = await _api.GetAsync<PageResult<EventLogDto>>(VtcApi.EventLogs,
-                    new Dictionary<string, string?> { ["take"] = "20", ["skip"] = "0" });
+                var logs = await tLogs;
                 if (_disposed) return; // 页面已切走
                 if (logs?.Items is { Count: > 0 })
                 {
@@ -88,8 +100,7 @@ public partial class ProfileView : UserControl
             // ② 排行榜（C11）
             try
             {
-                var lb = await _api.GetAsync<LeaderboardDto>(VtcApi.Leaderboard,
-                    new Dictionary<string, string?> { ["take"] = "10", ["skip"] = "0" }, useAuth: false);
+                var lb = await tLb;
                 if (_disposed) return; // 页面已切走
                 if (lb?.Items is { Count: > 0 })
                 {
@@ -139,12 +150,21 @@ public partial class ProfileView : UserControl
                 }
                 LogErr(ex);
             }
+            Log("LoadAsync·全部完成");
         }
         catch (Exception ex) { LogErr(ex); } // 最外层兜底：绝不向 UI 线程抛
     }
 
     private void SafeSet(Action a) { try { if (!_disposed) a(); } catch { } }
-    private void LogErr(Exception ex) { try { System.Diagnostics.Debug.WriteLine($"ProfileView: {ex}"); } catch { } }
+    private void LogErr(Exception ex)
+    {
+        try
+        {
+            VTC.Client.Logging.Serilog?.Error(ex, "【ProfileView】异常：{Msg}", ex.Message);
+            System.Diagnostics.Debug.WriteLine($"ProfileView: {ex}");
+        }
+        catch { }
+    }
 
     private static string BuildDetail(EventLogDto l)
     {

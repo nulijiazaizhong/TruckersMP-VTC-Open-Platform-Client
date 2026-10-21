@@ -69,9 +69,14 @@ public sealed class ApiClient : IApiClient
             AllowAutoRedirect = true,
             PooledConnectionLifetime = TimeSpan.FromMinutes(5),
             MaxConnectionsPerServer = 8,
+            // 显式 DNS 解析超时：避免某些环境（IPv6 优先/代理）下 DNS 探测挂起导致
+            // SendAsync 静默等待（曾致个人中心"卡死"——请求发出后永不返回）。
+            ConnectTimeout = TimeSpan.FromSeconds(8),
         })
         {
-            Timeout = TimeSpan.FromMinutes(5),
+            // 单请求总超时：20s 足够正常 API 响应；超时后 LoadAsync 的 catch 接管显示
+            // "加载失败"，不再让挂起请求永久冻住 UI（此前 5 分钟 → 用户感知"卡死"）。
+            Timeout = TimeSpan.FromSeconds(20),
         };
     }
 
