@@ -14,10 +14,13 @@ public partial class NewsView : UserControl
 {
     private string _tab = "ets2";
     private RssService? _rss;
+    private bool _loaded; // 实例复用安全网：页面被缓存复用时不重复初始化
 
     public NewsView()
     {
         InitializeComponent();
+        if (_loaded) return;
+        _loaded = true;
         var sp = AppServiceLocator.Services;
         _rss = sp?.GetService<RssService>();
         sourceHint.Text = "来源：SCS Blog（feedburner）";

@@ -17,9 +17,13 @@ public partial class ProfileView : UserControl
     private IApiClient? _api;
     private AuthService? _auth;
 
+    private bool _loaded; // 实例复用安全网：页面被缓存复用时不重复打 API（构造只在首次执行）
+
     public ProfileView()
     {
         InitializeComponent();
+        if (_loaded) return;
+        _loaded = true;
         var sp = AppServiceLocator.Services;
         _api = sp?.GetService<IApiClient>();
         _auth = sp?.GetService<AuthService>();

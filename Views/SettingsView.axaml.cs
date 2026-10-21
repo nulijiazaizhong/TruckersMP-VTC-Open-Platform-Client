@@ -91,9 +91,18 @@ public partial class SettingsView : UserControl
 
     // ===== 事件 =====
 
-    private void OnPickSaveDir(object? sender, RoutedEventArgs e) => PickFolder(p => { _settings.SetSaveDir(p); RefreshDirs(); });
-    private void OnPickGameDir(object? sender, RoutedEventArgs e) => PickFolder(p => { _settings.SetGameDir(p); RefreshDirs(); RefreshActive(); });
-    private void OnPickGameDoc(object? sender, RoutedEventArgs e) => PickFolder(p => { _settings.SetGameDocDir(p); RefreshDirs(); });
+    private void OnPickSaveDir(object? sender, RoutedEventArgs e) => PickFolder(p => { SetDirSafe(saveDir, () => { _settings.SetSaveDir(p); RefreshDirs(); }); });
+    private void OnPickGameDir(object? sender, RoutedEventArgs e) => PickFolder(p => { SetDirSafe(gameDir, () => { _settings.SetGameDir(p); RefreshDirs(); RefreshActive(); }); });
+    private void OnPickGameDoc(object? sender, RoutedEventArgs e) => PickFolder(p => { SetDirSafe(gameDocDir, () => { _settings.SetGameDocDir(p); RefreshDirs(); }); });
+
+    /// <summary>校验所选值是真实路径才写入；否则只回显提示，不污染配置。</summary>
+    private void SetDirSafe(TextBox target, Action apply)
+    {
+        var v = target.Text ?? "";
+        if (v.StartsWith('(')) // 降级提示文本 → 不写配置
+            return;
+        apply();
+    }
 
     private void PickFolder(Action<string> onPicked)
     {
@@ -117,23 +126,61 @@ public partial class SettingsView : UserControl
         var folders = await task;
         if (folders is { Count: > 0 })
         {
-            // Avalonia 11 IStorageFolder 不直接暴露 LocalPath（11.3 改为只暴露 Path 抽象）；
-            // 用反射尝试常见属性，最后降级提示
-            var item = folders[0];
-            string? path = null;
-            foreach (var name in new[] { "LocalPath", "Path", "DisplayPath", "PathString" })
+            var path = ExtractFolderPath(folders[0]);
+            if (string.IsNullOrWhiteSpace(path))
             {
+                // 选择器可用但路径提取失败：不要伪装成路径写进配置，给出明确提示
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    onPicked("(未能读取所选目录路径，请手动填写绝对路径)"));
+                return;
+            }
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => onPicked(path!));
+        }
+    }
+
+    /// <summary>
+    /// 从 IStorageFolder 实例提取绝对路径。Avalonia 11.3 的 IStorageItem 路径属性名
+    /// 跨版本有变动（11.0 LocalPath → 11.3 可能更名），不猜名字：
+    /// 遍历实例类型所有 public 只读 string 属性，取第一个"看起来像绝对路径"的值。
+    /// </summary>
+    private static string? ExtractFolderPath(object item)
+    {
+        // ① 先试几个已知属性名（快路径，覆盖 11.0-11.2 的 LocalPath）
+        foreach (var name in new[] { "LocalPath", "Path", "DisplayPath", "PathString", "FullPath" })
+        {
+            try
+            {
+                if (item.GetType().GetProperty(name)?.GetValue(item) is string s && LooksLikePath(s))
+                    return s;
+            }
+            catch { }
+        }
+        // ② 兜底：遍历所有 public 实例 string 属性，找第一个像路径的
+        try
+        {
+            foreach (var p in item.GetType().GetProperties(
+                         System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+            {
+                if (p.PropertyType != typeof(string) || !p.CanRead) continue;
                 try
                 {
-                    var p = item.GetType().GetProperty(name);
-                    if (p?.GetValue(item) is string s) { path = s; break; }
+                    if (p.GetValue(item) is string s && LooksLikePath(s))
+                        return s;
                 }
                 catch { }
             }
-            if (string.IsNullOrWhiteSpace(path))
-                path = "(P0 降级：文件夹选择器 API 不可用，请手动在 .env 设置 SAVE_DIR/GAME_DIR)";
-            Avalonia.Threading.Dispatcher.UIThread.Post(() => onPicked(path!));
         }
+        catch { }
+        return null;
+    }
+
+    private static bool LooksLikePath(string s)
+    {
+        if (string.IsNullOrWhiteSpace(s) || s.Length < 3) return false;
+        // Windows 盘符（C:\...）、UNC（\\server\share）、POSIX 绝对路径（/...）
+        return s.Length >= 2 && char.IsLetter(s[0]) && s[1] == ':'
+            || s.StartsWith("\\\\")
+            || s.StartsWith('/');
     }
 
     private async void OnCheckUpdateClick(object? sender, RoutedEventArgs e)

@@ -18,6 +18,10 @@ public partial class MainWindow : Window
     private ShellViewModel? _shell;
     private AuthService? _auth;
     private BrandingService? _branding;
+    // 导航防抖：快速连点侧边栏会重复 new 页面（Profile/News 构造即 fire-and-forget 异步加载），
+    // 堆积大量并发异步任务 + 内存膨胀 → UI 卡死。300ms 内的连点直接忽略。
+    private bool _navigating;
+    private int _lastNavTs;
 
     public MainWindow()
     {
@@ -77,12 +81,21 @@ public partial class MainWindow : Window
     /// <summary>导航到指定页（home/news/settings/admin/profile）。开发模式 --navigate= 用它直达某页做诊断/截图。</summary>
     public void NavigateTo(string key) => ShowPage(key);
 
+    // 页面实例复用：同页不重复 new（Profile/News 构造即 fire-and-forget 异步加载，
+    // 反复 new 会堆积并发异步任务 + 内存膨胀 → 快速连点时 UI 卡死）。
+    private readonly Dictionary<string, Control> _pageCache = new();
+
     private void ShowPage(string key)
     {
         _shell.ActiveNav = key;
         UpdateNavVisibility();
         UpdateNavActive(key);
-        contentHost.Content = CreatePage(key);
+        if (!_pageCache.TryGetValue(key, out var page))
+        {
+            page = CreatePage(key);
+            _pageCache[key] = page;
+        }
+        contentHost.Content = page;
     }
 
     /// <summary>
