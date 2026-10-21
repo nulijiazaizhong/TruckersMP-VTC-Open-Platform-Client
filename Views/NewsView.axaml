@@ -1,20 +1,16 @@
 <UserControl xmlns="https://github.com/avaloniaui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="VTC.Client.Views.NewsView"
-             x:Name="root">
+              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+              x:Class="VTC.Client.Views.NewsView"
+              x:Name="root">
   <DockPanel Margin="20,16,20,0">
-    <!-- 顶部标签：欧卡(ETS2) / 美卡(ATS) -->
+    <!-- 顶部：刷新 + 来源 -->
     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,14">
-      <Button x:Name="tabEts2" Content="欧卡（ETS2）" Width="140" Height="36"
-              Background="{DynamicResource vtc_accent}" Foreground="White"
-              CornerRadius="6" Click="OnTabClick" Tag="ets2"/>
-      <Button x:Name="tabAts" Content="美卡（ATS）" Width="140" Height="36"
-              Background="Transparent" Foreground="#BBB" BorderBrush="#444"
-              CornerRadius="6" Click="OnTabClick" Tag="ats"/>
-      <Button x:Name="btnRefresh" Content="刷新" Margin="12,0,0,0" Width="70" Height="36"
+      <TextBlock Text="SCS Software 官方资讯" FontSize="16" FontWeight="SemiBold"
+                 Foreground="#E0E0E0" VerticalAlignment="Center"/>
+      <Button x:Name="btnRefresh" Content="刷新" Margin="14,0,0,0" Width="70" Height="32"
               CornerRadius="6" Click="OnRefreshClick"/>
       <TextBlock x:Name="sourceHint" VerticalAlignment="Center" Margin="12,0,0,0"
-                 FontSize="12" Foreground="#888"/>
+                 FontSize="12" Foreground="#888" Text="来源：SCS Blog（feedburner）"/>
     </StackPanel>
 
     <!-- 加载状态 -->
@@ -28,29 +24,77 @@
                Foreground="#999" HorizontalAlignment="Center" Margin="0,40"
                IsVisible="False"/>
 
-    <!-- 资讯列表 -->
-    <ItemsControl x:Name="list">
-      <ItemsControl.ItemTemplate>
-        <DataTemplate>
-          <Border Padding="14,12" BorderBrush="#333" BorderThickness="0,0,0,1" Margin="0,0,0,0">
-            <DockPanel>
-              <StackPanel DockPanel.Dock="Right" MinWidth="90" Margin="12,0,0,0"
-                          VerticalAlignment="Top" HorizontalAlignment="Right">
-                <TextBlock Text="{Binding DateText}" FontSize="12" Foreground="#888"/>
-                <TextBlock Text="{Binding GameVersionTag}" FontSize="11" Foreground="#666"
-                           Margin="0,2,0,0"/>
-              </StackPanel>
-              <StackPanel>
-                <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="Medium"
-                           Foreground="#E0E0E0" TextWrapping="Wrap"/>
-                <TextBlock Text="{Binding Summary}" FontSize="12" Foreground="#999"
-                           TextWrapping="Wrap" Margin="0,4,0,0"
-                           IsVisible="{Binding HasSummary}"/>
-              </StackPanel>
-            </DockPanel>
-          </Border>
-        </DataTemplate>
-      </ItemsControl.ItemTemplate>
-    </ItemsControl>
+    <!-- 滚动区：ETS2 / ATS 两个分组 -->
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+      <StackPanel>
+        <!-- ===== 欧卡 ETS2 分组 ===== -->
+        <TextBlock x:Name="ets2Header" Text="🇪🇺 欧卡 · Euro Truck Simulator 2"
+                   FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource vtc_accent}"
+                   Margin="0,8,0,8"/>
+        <ItemsControl x:Name="ets2List">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Border Padding="14,12" BorderBrush="#333" BorderThickness="0,0,0,1"
+                      Background="Transparent" Cursor="Hand"
+                      PointerPressed="OnItemPressed" Tag="{Binding}">
+                <DockPanel>
+                  <StackPanel DockPanel.Dock="Right" MinWidth="90" Margin="12,0,0,0"
+                              VerticalAlignment="Top" HorizontalAlignment="Right">
+                    <TextBlock Text="{Binding DateText}" FontSize="12" Foreground="#888"/>
+                    <TextBlock Text="{Binding GameVersionTag}" FontSize="11" Foreground="#666"
+                               Margin="0,2,0,0"/>
+                  </StackPanel>
+                  <StackPanel>
+                    <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="Medium"
+                               Foreground="#E0E0E0" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding Summary}" FontSize="12" Foreground="#999"
+                               TextWrapping="Wrap" Margin="0,4,0,0"
+                               IsVisible="{Binding HasSummary}"/>
+                    <TextBlock Text="点击查看详情 →" FontSize="11" Foreground="#5a8fc7"
+                               Margin="0,4,0,0"/>
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock x:Name="ets2Empty" Text="（暂无欧卡资讯）" FontSize="12" Foreground="#666"
+                   Margin="14,8" IsVisible="False"/>
+
+        <!-- ===== 美卡 ATS 分组 ===== -->
+        <TextBlock x:Name="atsHeader" Text="🇺🇸 美卡 · American Truck Simulator"
+                   FontSize="14" FontWeight="SemiBold" Foreground="#d99a4e"
+                   Margin="0,18,0,8"/>
+        <ItemsControl x:Name="atsList">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Border Padding="14,12" BorderBrush="#333" BorderThickness="0,0,0,1"
+                      Background="Transparent" Cursor="Hand"
+                      PointerPressed="OnItemPressed" Tag="{Binding}">
+                <DockPanel>
+                  <StackPanel DockPanel.Dock="Right" MinWidth="90" Margin="12,0,0,0"
+                              VerticalAlignment="Top" HorizontalAlignment="Right">
+                    <TextBlock Text="{Binding DateText}" FontSize="12" Foreground="#888"/>
+                    <TextBlock Text="{Binding GameVersionTag}" FontSize="11" Foreground="#666"
+                               Margin="0,2,0,0"/>
+                  </StackPanel>
+                  <StackPanel>
+                    <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="Medium"
+                               Foreground="#E0E0E0" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding Summary}" FontSize="12" Foreground="#999"
+                               TextWrapping="Wrap" Margin="0,4,0,0"
+                               IsVisible="{Binding HasSummary}"/>
+                    <TextBlock Text="点击查看详情 →" FontSize="11" Foreground="#c78a4a"
+                               Margin="0,4,0,0"/>
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock x:Name="atsEmpty" Text="（暂无美卡资讯）" FontSize="12" Foreground="#666"
+                   Margin="14,8" IsVisible="False"/>
+      </StackPanel>
+    </ScrollViewer>
   </DockPanel>
 </UserControl>

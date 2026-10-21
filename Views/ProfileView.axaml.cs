@@ -48,81 +48,94 @@ public partial class ProfileView : UserControl
     {
         if (_api == null) return;
 
-        // ① 活动记录（C7）
+        // 兜底：整个加载流程任何未预料的异常（含 UI 回写时控件已卸载）都写日志，
+        // 绝不抛到 UI 线程导致崩溃。
         try
         {
-            var logs = await _api.GetAsync<PageResult<EventLogDto>>(VtcApi.EventLogs,
-                new Dictionary<string, string?> { ["take"] = "20", ["skip"] = "0" });
-            if (_disposed) return; // 页面已切走
-            if (logs?.Items is { Count: > 0 })
+            // ① 活动记录（C7）
+            try
             {
-                var items = new ObservableCollection<EventLogItem>();
-                foreach (var l in logs.Items)
+                var logs = await _api.GetAsync<PageResult<EventLogDto>>(VtcApi.EventLogs,
+                    new Dictionary<string, string?> { ["take"] = "20", ["skip"] = "0" });
+                if (_disposed) return; // 页面已切走
+                if (logs?.Items is { Count: > 0 })
                 {
-                    items.Add(new EventLogItem
+                    var items = new ObservableCollection<EventLogItem>();
+                    foreach (var l in logs.Items)
                     {
-                        Title = l.EventName ?? $"活动 {l.EventId:R}",
-                        Detail = BuildDetail(l),
-                        TimeText = l.At.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
-                    });
+                        items.Add(new EventLogItem
+                        {
+                            Title = l.EventName ?? $"活动 {l.EventId:R}",
+                            Detail = BuildDetail(l),
+                            TimeText = l.At.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+                        });
+                    }
+                    records.ItemsSource = items;
+                    recordsEmpty.IsVisible = false;
                 }
-                records.ItemsSource = items;
-                recordsEmpty.IsVisible = false;
             }
-        }
-        catch { recordsEmpty.Text = "活动记录加载失败"; }
+            catch (Exception ex) { if (!_disposed) SafeSet(() => recordsEmpty.Text = "活动记录加载失败"); LogErr(ex); }
 
-        // ② 排行榜（C11）
-        try
-        {
-            var lb = await _api.GetAsync<LeaderboardDto>(VtcApi.Leaderboard,
-                new Dictionary<string, string?> { ["take"] = "10", ["skip"] = "0" }, useAuth: false);
-            if (_disposed) return; // 页面已切走
-            if (lb?.Items is { Count: > 0 })
+            // ② 排行榜（C11）
+            try
             {
-                var entries = new ObservableCollection<LbEntry>();
-                var myRank = 0;
-                foreach (var e in lb.Items)
+                var lb = await _api.GetAsync<LeaderboardDto>(VtcApi.Leaderboard,
+                    new Dictionary<string, string?> { ["take"] = "10", ["skip"] = "0" }, useAuth: false);
+                if (_disposed) return; // 页面已切走
+                if (lb?.Items is { Count: > 0 })
                 {
-                    // 尝试匹配当前用户
+                    var entries = new ObservableCollection<LbEntry>();
+                    LeaderboardEntryDto? meEntry = null;
                     var username = _auth?.CurrentUsername;
-                    if (!string.IsNullOrWhiteSpace(username)
-                        && e.Username.Equals(username, StringComparison.OrdinalIgnoreCase))
-                        myRank = (int)e.Rank;
-                    entries.Add(new LbEntry
+                    foreach (var e in lb.Items)
                     {
-                        RankText = e.Rank <= 3 ? $"#{e.Rank} 🏅" : $"#{e.Rank}",
-                        RankBrush = e.Rank <= 3
-                            ? new SolidColorBrush(Color.FromRgb(255, 193, 7))
-                            : new SolidColorBrush(Color.FromRgb(136, 136, 136)),
-                        Username = e.Username,
-                        Plate = e.Plate ?? "",
-                        PointsText = $"{e.Points} 分",
-                    });
-                }
-                leaderboard.ItemsSource = entries;
-                lbEmpty.IsVisible = false;
+                        if (meEntry == null
+                            && !string.IsNullOrWhiteSpace(username)
+                            && e.Username != null
+                            && e.Username.Equals(username, StringComparison.OrdinalIgnoreCase))
+                            meEntry = e; // 收集匹配项，避免后续 First 抛异常
+                        entries.Add(new LbEntry
+                        {
+                            RankText = e.Rank <= 3 ? $"#{e.Rank} 🏅" : $"#{e.Rank}",
+                            RankBrush = e.Rank <= 3
+                                ? new SolidColorBrush(Color.FromRgb(255, 193, 7))
+                                : new SolidColorBrush(Color.FromRgb(136, 136, 136)),
+                            Username = e.Username ?? "",
+                            Plate = e.Plate ?? "",
+                            PointsText = $"{e.Points} 分",
+                        });
+                    }
+                    leaderboard.ItemsSource = entries;
+                    lbEmpty.IsVisible = false;
 
-                // 积分与排名文本
-                if (myRank > 0)
-                {
-                    var me = lb.Items.First(e => e.Username.Equals(_auth?.CurrentUsername, StringComparison.OrdinalIgnoreCase));
-                    pointsText.Text = $"积分：{me.Points}";
-                    rankText.Text = $"排名：#{myRank} / {lb.Total}";
-                }
-                else
-                {
-                    pointsText.Text = "积分：—（未上榜）";
-                    rankText.Text = $"总成员：{lb.Total}";
+                    // 积分与排名文本（用收集到的 meEntry，不再二次 First）
+                    if (meEntry != null)
+                    {
+                        pointsText.Text = $"积分：{meEntry.Points}";
+                        rankText.Text = $"排名：#{meEntry.Rank} / {lb.Total}";
+                    }
+                    else
+                    {
+                        pointsText.Text = "积分：—（未上榜）";
+                        rankText.Text = $"总成员：{lb.Total}";
+                    }
                 }
             }
+            catch (Exception ex)
+            {
+                if (!_disposed)
+                {
+                    SafeSet(() => pointsText.Text = "积分：—（加载失败）");
+                    SafeSet(() => rankText.Text = "");
+                }
+                LogErr(ex);
+            }
         }
-        catch
-        {
-            pointsText.Text = "积分：—（加载失败）";
-            rankText.Text = "";
-        }
+        catch (Exception ex) { LogErr(ex); } // 最外层兜底：绝不向 UI 线程抛
     }
+
+    private void SafeSet(Action a) { try { if (!_disposed) a(); } catch { } }
+    private void LogErr(Exception ex) { try { System.Diagnostics.Debug.WriteLine($"ProfileView: {ex}"); } catch { } }
 
     private static string BuildDetail(EventLogDto l)
     {

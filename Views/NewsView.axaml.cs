@@ -1,22 +1,24 @@
+using System.Diagnostics;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Microsoft.Extensions.DependencyInjection;
 using VTC.Client.Services;
+using RssItem = VTC.Client.Services.RssService.RssItem;
 
 namespace VTC.Client.Views;
 
 /// <summary>
-/// C9 资讯（P1）：欧卡/美卡 双源 RSS + 本地缓存 + 版本标签过滤。
-/// 默认源：SCS Blog feedburner（.env 可覆盖 RSS_FEED_ETS2 / RSS_FEED_ATS）。
+/// C9 资讯（P1）：SCS Blog 官方 RSS，按 欧卡(ETS2) / 美卡(ATS) 分组展示，
+/// 点击条目用系统浏览器打开详情页。
+/// 源：feedburner Atom feed（.env 可覆盖 RSS_FEED_ETS2 / RSS_FEED_ATS）。
 /// </summary>
 public partial class NewsView : UserControl
 {
-    private string _tab = "ets2";
     private RssService? _rss;
-    private bool _loaded; // 实例复用安全网：页面被缓存复用时不重复初始化
-
-    private CancellationTokenSource? _cts; // 页面被切走时取消 pending 请求，防止对已脱离视觉树的控件回写
+    private bool _loaded;
+    private CancellationTokenSource? _cts; // 页面切走时取消 pending 加载
 
     public NewsView()
     {
@@ -26,20 +28,7 @@ public partial class NewsView : UserControl
         var sp = AppServiceLocator.Services;
         _rss = sp?.GetService<RssService>();
         sourceHint.Text = "来源：SCS Blog（feedburner）";
-        Unloaded += (_, _) => _cts?.Cancel(); // 离开页面即取消未完成的加载
-        _ = LoadAsync();
-    }
-
-    private void OnTabClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (sender is not Button { Tag: string tag }) return;
-        _tab = tag;
-        var accent = App.Current.Resources["vtc_accent"] as IBrush ?? new SolidColorBrush(Color.FromRgb(30, 136, 229));
-        tabEts2.Background = tag == "ets2" ? accent : Brushes.Transparent;
-        tabEts2.Foreground = tag == "ets2" ? Brushes.White : new SolidColorBrush(Color.FromRgb(187, 187, 187));
-        tabAts.Background = tag == "ats" ? accent : Brushes.Transparent;
-        tabAts.Foreground = tag == "ats" ? Brushes.White : new SolidColorBrush(Color.FromRgb(187, 187, 187));
-        sourceHint.Text = tag == "ets2" ? "来源：SCS Blog · 欧卡" : "来源：SCS Blog · 美卡";
+        Unloaded += (_, _) => _cts?.Cancel();
         _ = LoadAsync();
     }
 
@@ -53,8 +42,30 @@ public partial class NewsView : UserControl
                 foreach (var f in System.IO.Directory.GetFiles(cacheDir))
                     System.IO.File.Delete(f);
         }
-        catch { /* ignore */ }
+        catch { }
         _ = LoadAsync();
+    }
+
+    // 点击条目 → 系统浏览器打开详情页
+    private void OnItemPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Control { Tag: RssItem item }) return;
+        OpenInBrowser(item.Link);
+    }
+
+    private static void OpenInBrowser(string url)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(url)) return;
+            if (!url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                url = "https://" + url;
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"打开浏览器失败：{ex.Message}");
+        }
     }
 
     private async Task LoadAsync()
@@ -66,7 +77,6 @@ public partial class NewsView : UserControl
             return;
         }
 
-        // 取消上一次未完成的加载（切 tab / 刷新时避免并发叠加）
         _cts?.Cancel();
         var cts = new CancellationTokenSource();
         _cts = cts;
@@ -75,26 +85,46 @@ public partial class NewsView : UserControl
         emptyHint.IsVisible = false;
         btnRefresh.IsEnabled = false;
 
+        // 并行拉取 ets2 + ats 两个源
+        Task<List<RssItem>> tEts = Task.Run(() => _rss.GetItemsAsync("ets2", take: 30, ct: cts.Token), cts.Token);
+        Task<List<RssItem>> tAts = Task.Run(() => _rss.GetItemsAsync("ats", take: 30, ct: cts.Token), cts.Token);
+
+        List<RssItem> ets = new(), ats = new();
         try
         {
-            var items = await _rss.GetItemsAsync(_tab, take: 30, ct: cts.Token);
-            if (cts.IsCancellationRequested) return; // 页面已切走，不再回写 UI
-            list.ItemsSource = items;
-            emptyHint.IsVisible = items.Count == 0;
+            await Task.WhenAll(tEts, tAts);
+            ets = tEts.Result ?? new();
+            ats = tAts.Result ?? new();
         }
         catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
+            if (cts.IsCancellationRequested) return;
             emptyHint.IsVisible = true;
             emptyHint.Text = $"加载失败：{ex.Message}";
+            loadingHint.IsVisible = false;
+            btnRefresh.IsEnabled = true;
+            return;
         }
-        finally
-        {
-            if (!cts.IsCancellationRequested)
-            {
-                loadingHint.IsVisible = false;
-                btnRefresh.IsEnabled = true;
-            }
-        }
+
+        if (cts.IsCancellationRequested) return; // 页面已切走
+
+        // 按游戏归类（源本身可能混，按 item.Game 再分一次）
+        var etsItems = ets.Where(i => i.Game == "ets2").ToList();
+        var atsItems = ats.Where(i => i.Game == "ats").ToList();
+        // 若某源返回的 item 游戏标签与源不符，兜底按源归类
+        if (etsItems.Count == 0 && ets.Count > 0) etsItems = ets;
+        if (atsItems.Count == 0 && ats.Count > 0) atsItems = ats;
+
+        ets2List.ItemsSource = etsItems;
+        atsList.ItemsSource = atsItems;
+        ets2Empty.IsVisible = etsItems.Count == 0;
+        atsEmpty.IsVisible = atsItems.Count == 0;
+        emptyHint.IsVisible = etsItems.Count == 0 && atsItems.Count == 0;
+        if (emptyHint.IsVisible)
+            emptyHint.Text = "暂无资讯（RSS 源可能不可达或无新内容）";
+
+        loadingHint.IsVisible = false;
+        btnRefresh.IsEnabled = true;
     }
 }
