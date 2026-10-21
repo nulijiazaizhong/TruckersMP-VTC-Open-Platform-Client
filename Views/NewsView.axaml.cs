@@ -110,25 +110,77 @@ public partial class NewsView : UserControl
             return;
         }
 
-        // 按 <img> 标签切分：图片之间的文本段 + 图片本身，按原始顺序排布
-        // 匹配 <img ... src="..." ...>（单/双引号、属性顺序不定）
+        // ① 关键：源 HTML 里图片 URL 常被**折行**（URL 中间有换行/空格），
+        //    必须先折叠，否则正则截断到换行 → 拿到残缺 URL → 图片加载失败。
+        //    对引号内的内容（属性值/URL）去掉所有空白；引号外的换行转段落换行。
+        var norm = NormaliseHtml(html);
+
+        // ② 按 <img> 切分：图片之间的文本段 + 图片本身，按原始顺序排布
         var imgRegex = new System.Text.RegularExpressions.Regex(
             @"<img\b[^>]*?\bsrc\s*=\s*([""'])(.*?)\1[^>]*?>",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
         var pos = 0;
-        foreach (System.Text.RegularExpressions.Match m in imgRegex.Matches(html))
+        foreach (System.Text.RegularExpressions.Match m in imgRegex.Matches(norm))
         {
-            // 图片前的文本段
             if (m.Index > pos)
-                AddTextBlock(detailBody, StripHtmlText(html.Substring(pos, m.Index - pos)));
-            // 图片本身
-            AddImage(detailBody, m.Groups[2].Value);
+                AddTextBlock(detailBody, StripHtmlText(norm.Substring(pos, m.Index - pos)));
+            // src 值再兜底去空白（防漏网）
+            var src = new string(m.Groups[2].Value.Where(c => !char.IsWhiteSpace(c)).ToArray());
+            // 若 img 被 <a href="原图"> 包裹（Blogger 模式：a=原图 s1920, img=缩略图 w640），
+            // 取 a 的 href 作为 fallback——缩略图 404 时回退原图。
+            var fallback = FindWrappingAHref(norm, m.Index);
+            AddImage(detailBody, src, fallback);
             pos = m.Index + m.Length;
         }
-        // 尾部剩余文本
-        if (pos < html.Length)
-            AddTextBlock(detailBody, StripHtmlText(html.Substring(pos)));
+        if (pos < norm.Length)
+            AddTextBlock(detailBody, StripHtmlText(norm.Substring(pos)));
+    }
+
+    /// <summary>在 pos（&lt;img&gt; 起点）前找最近的 &lt;a href="..."&gt;，返回其 href（去空白）。找不到返回 null。</summary>
+    private static string? FindWrappingAHref(string html, int imgPos)
+    {
+        if (imgPos <= 0) return null;
+        // 向前找最近的 <a ...> 开始标签
+        var aStart = html.LastIndexOf("<a", 0, imgPos, System.StringComparison.OrdinalIgnoreCase);
+        if (aStart < 0) return null;
+        // 该 <a> 之后到 imgPos 之间不应再有其他标签开始（确保 img 直接在其内）
+        var afterA = html.IndexOf('>', aStart);
+        if (afterA < 0) return null;
+        var between = html.Substring(aStart, imgPos - aStart);
+        // 提取 href
+        var m = System.Text.RegularExpressions.Regex.Match(
+            between, @"\bhref\s*=\s*([""'])(.*?)\1", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (!m.Success) return null;
+        var href = new string(m.Groups[2].Value.Where(c => !char.IsWhiteSpace(c)).ToArray());
+        return href.StartsWith("http", System.StringComparison.OrdinalIgnoreCase) ? href : null;
+    }
+
+    /// <summary>
+    /// 归一化 HTML：① 引号内（属性值/URL）去掉所有空白字符（修 URL 折行）；
+    /// ② 引号外的换行/块级标签转换行（保留段落）。
+    /// </summary>
+    private static string NormaliseHtml(string html)
+    {
+        // 用引号把字符串切成「引号外 / 引号内」交替片段
+        var sb = new System.Text.StringBuilder();
+        bool inQuote = false;
+        char quote = '\0';
+        foreach (var c in html)
+        {
+            if (inQuote)
+            {
+                if (c == quote) { inQuote = false; sb.Append(c); }
+                else if (!char.IsWhiteSpace(c)) sb.Append(c);   // 引号内：丢所有空白
+                // 换行/空格直接丢弃（URL 折行修复）
+            }
+            else
+            {
+                if (c == '"' || c == '\'') { inQuote = true; quote = c; sb.Append(c); }
+                else sb.Append(c);
+            }
+        }
+        return sb.ToString();
     }
 
     private static void AddTextBlock(Avalonia.Controls.StackPanel host, string text)
@@ -145,14 +197,10 @@ public partial class NewsView : UserControl
         });
     }
 
-    private static void AddImage(Avalonia.Controls.StackPanel host, string src)
+    private static void AddImage(Avalonia.Controls.StackPanel host, string src, string? fallback = null)
     {
-        if (string.IsNullOrWhiteSpace(src)) return;
-        if (!src.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-        {
-            // 相对路径：SCS Blog 图片一般是绝对 URL；若相对则跳过（避免无效加载）
-            return;
-        }
+        // 主图与回退图都是无效/相对 URL 时跳过
+        if (!IsHttpUrl(src) && !IsHttpUrl(fallback)) return;
         var img = new Image
         {
             Stretch = Stretch.Uniform,
@@ -161,42 +209,69 @@ public partial class NewsView : UserControl
             Margin = new Thickness(0, 0, 0, 12),
             HorizontalAlignment = HorizontalAlignment.Left,
         };
-        // 异步加载远程图片（Bitmap 从 URI 异步，不阻塞 UI）
-        _ = LoadImageAsync(img, src);
+        // 异步加载：先试 src（缩略图），失败回退 fallback（原图）
+        _ = LoadImageAsync(img, src, fallback);
         host.Children.Add(img);
     }
 
-    private static async System.Threading.Tasks.Task LoadImageAsync(Image img, string url)
+    private static bool IsHttpUrl(string? u) =>
+        !string.IsNullOrWhiteSpace(u) && u.StartsWith("http", StringComparison.OrdinalIgnoreCase);
+
+    private static async System.Threading.Tasks.Task LoadImageAsync(Image img, string url, string? fallback = null)
     {
-        try
+        // 依次尝试：主图 → 回退图
+        var candidates = new List<string>();
+        if (IsHttpUrl(url)) candidates.Add(url);
+        if (IsHttpUrl(fallback) && fallback != url) candidates.Add(fallback!);
+
+        foreach (var u in candidates)
         {
-            using var http = new System.Net.Http.HttpClient { Timeout = System.TimeSpan.FromSeconds(20) };
-            var bytes = await http.GetByteArrayAsync(url);
-            using var ms = new System.IO.MemoryStream(bytes);
-            var bmp = new Avalonia.Media.Imaging.Bitmap(ms);
-            // 回到 UI 线程赋值
-            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => img.Source = bmp);
-        }
-        catch
-        {
-            // 图片加载失败：移除占位（或保留灰块），不中断
-            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+            try
             {
-                img.Source = null;
-                img.Height = 0;
-            });
+                using var http = new System.Net.Http.HttpClient { Timeout = System.TimeSpan.FromSeconds(20) };
+                var bytes = await http.GetByteArrayAsync(u);
+                if (bytes.Length == 0) continue;
+                using var ms = new System.IO.MemoryStream(bytes);
+                var bmp = new Avalonia.Media.Imaging.Bitmap(ms);
+                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    img.Source = bmp;
+                    img.MinHeight = 0; // 加载成功，移除占位
+                });
+                return; // 成功
+            }
+            catch { /* 试下一个候选 */ }
         }
+
+        // 全部失败：收起占位（不留空白）
+        await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            img.Source = null;
+            img.Height = 0;
+            img.MinHeight = 0;
+        });
     }
 
-    /// <summary>轻量去 HTML 标签（详情页文本段用，保留换行）。</summary>
+    /// <summary>
+    /// 去 HTML 标签（详情页文本段用，保留换行）。
+    /// 先把块级标签换行、再删**所有**标签（含 &lt;a href="长URL"&gt;——否则属性文本会露出），
+    /// 再解码实体、折叠空白。
+    /// </summary>
     private static string StripHtmlText(string html)
     {
         if (string.IsNullOrEmpty(html)) return "";
-        var t = System.Text.RegularExpressions.Regex.Replace(html, @"</?(p|div|br|ul|ol|li|h[1-6])[^>]*>", "\n");
-        t = System.Text.RegularExpressions.Regex.Replace(t, @"<[^>]+>", "");
+        var t = html;
+        // 块级结束/开始 → 换行（保留段落结构）
+        t = System.Text.RegularExpressions.Regex.Replace(t,
+            @"</?(p|div|ul|ol|li|h[1-6]|blockquote|table|tr|br)\b[^>]*>", "\n");
+        // 删除所有剩余标签（a/img/span/strong 等，含其属性）
+        t = System.Text.RegularExpressions.Regex.Replace(t, @"<[^>]*>", "");
+        // 解码常见实体
         t = t.Replace("&nbsp;", " ").Replace("&amp;", "&")
              .Replace("&lt;", "<").Replace("&gt;", ">").Replace("&quot;", "\"").Replace("&#39;", "'");
+        // 折叠行内空白（保留换行）
         t = System.Text.RegularExpressions.Regex.Replace(t, @"[ \t]+", " ");
+        t = System.Text.RegularExpressions.Regex.Replace(t, @" ?\n ?", "\n");
         t = System.Text.RegularExpressions.Regex.Replace(t, @"\n{3,}", "\n\n");
         return t.Trim();
     }
