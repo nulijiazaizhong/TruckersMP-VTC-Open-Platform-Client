@@ -117,15 +117,32 @@ public partial class MainWindow : Window
 
     private Control CreatePage(string key)
     {
-        switch (key)
+        try
         {
-            case "news": return new NewsView();
-            case "settings": return new SettingsView();
-            case "admin": return new AdminView();
-            case "profile": return new ProfileView();
-            case "home":
-            default:
-                return new HomeView();
+            switch (key)
+            {
+                case "news": return new NewsView();
+                case "settings": return new SettingsView();
+                case "admin": return new AdminView();
+                case "profile": return new ProfileView();
+                case "home":
+                default:
+                    return new HomeView();
+            }
+        }
+        catch (Exception ex)
+        {
+            // 页面构造/初始化失败：写日志 + 显示错误占位页（不崩进程，便于诊断）。
+            VTC.Client.Logging.Serilog?.Error(ex, "创建页面失败：{Key}", key);
+            System.Diagnostics.Debug.WriteLine($"CreatePage({key}) 失败：{ex}");
+            var tb = new TextBlock
+            {
+                Text = $"页面加载失败（{key}）：{ex.Message}\n\n详见日志 vtc*.log",
+                Foreground = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(0xF4, 0x43, 0x36)),
+                Margin = new Avalonia.Thickness(24),
+                TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+            };
+            return new Border { Child = tb, Padding = new Avalonia.Thickness(16) };
         }
     }
 

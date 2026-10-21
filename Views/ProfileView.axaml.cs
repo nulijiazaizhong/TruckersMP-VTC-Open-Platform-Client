@@ -22,7 +22,16 @@ public partial class ProfileView : UserControl
 
     public ProfileView()
     {
-        InitializeComponent();
+        try
+        {
+            InitializeComponent();
+        }
+        catch (Exception ex)
+        {
+            // XAML 初始化失败：记录后仍尝试构造（避免崩进程），后续绑定走空控件
+            VTC.Client.Logging.Serilog?.Error(ex, "ProfileView.InitializeComponent 失败");
+            throw;
+        }
         if (_loaded) return;
         _loaded = true;
         var sp = AppServiceLocator.Services;
