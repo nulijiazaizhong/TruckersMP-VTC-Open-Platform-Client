@@ -54,12 +54,22 @@ public sealed class AppSettings
 
     private static AppSettingsData Normalise(AppSettingsData d)
     {
-        d.SaveDir = Expand(d.SaveDir);
-        d.GameDir = Expand(d.GameDir);
-        d.GameDocDir = Expand(d.GameDocDir);
+        // 清洗历史脏数据：早期版本曾把"降级/失败提示文本"当成路径写入配置，
+        // 启动时识别并清空（提示文本特征：以 '(' 开头的非真实路径），避免再次显示。
+        d.SaveDir = CleanPath(Expand(d.SaveDir));
+        d.GameDir = CleanPath(Expand(d.GameDir));
+        d.GameDocDir = CleanPath(Expand(d.GameDocDir));
         if (string.IsNullOrWhiteSpace(d.Lang)) d.Lang = "zh-CN";
         if (string.IsNullOrWhiteSpace(d.Theme)) d.Theme = "light";
         return d;
+    }
+
+    /// <summary>值是提示文本（以 '(' 开头）时清空为 null，避免把历史脏数据显示出来。</summary>
+    private static string? CleanPath(string? v)
+    {
+        if (string.IsNullOrWhiteSpace(v)) return v;
+        if (v.StartsWith('(') || v.StartsWith("（")) return null;
+        return v;
     }
 
     static string? Expand(string? v) => string.IsNullOrWhiteSpace(v) ? v : EnvLoader.Expand(v);

@@ -129,7 +129,7 @@ public partial class SettingsView : UserControl
             var path = ExtractFolderPath(folders[0]);
             if (string.IsNullOrWhiteSpace(path))
             {
-                // 选择器可用但路径提取失败：不要伪装成路径写进配置，给出明确提示
+                // 路径提取失败：不写配置，仅在输入框提示手动填写
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     onPicked("(未能读取所选目录路径，请手动填写绝对路径)"));
                 return;
@@ -145,7 +145,22 @@ public partial class SettingsView : UserControl
     /// </summary>
     private static string? ExtractFolderPath(object item)
     {
-        // ① 先试几个已知属性名（快路径，覆盖 11.0-11.2 的 LocalPath）
+        // ① Avalonia 11.3 的 BclStorageFolder：Path 是 **Uri**（非 string），另有 FileSystemInfo。
+        //    优先取 FileSystemInfo.FullName（System.IO，最稳），回退 Path(Uri).LocalPath。
+        try
+        {
+            if (item.GetType().GetProperty("FileSystemInfo")?.GetValue(item) is System.IO.FileSystemInfo fi
+                && !string.IsNullOrWhiteSpace(fi.FullName))
+                return fi.FullName;
+        }
+        catch { }
+        try
+        {
+            if (item.GetType().GetProperty("Path")?.GetValue(item) is System.Uri uri)
+                return Uri.UnescapeDataString(uri.LocalPath);
+        }
+        catch { }
+        // ② 兼容 11.0-11.2：Path/LocalPath 直接是 string
         foreach (var name in new[] { "LocalPath", "Path", "DisplayPath", "PathString", "FullPath" })
         {
             try
