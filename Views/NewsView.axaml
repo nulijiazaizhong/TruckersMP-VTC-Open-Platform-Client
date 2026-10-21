@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:VTC.Client.ViewModels"
+             x:Class="VTC.Client.Views.NewsView"
+             x:Name="root">
+  <DockPanel Margin="20,16,20,0">
+    <!-- 顶部标签：欧卡(ETS2) / 美卡(ATS) -->
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,14">
+      <Button x:Name="tabEts2" Content="欧卡（ETS2）" Width="140" Height="36"
+              Background="{DynamicResource vtc_accent}" Foreground="White"
+              CornerRadius="6" Click="OnTabClick" Tag="ets2"/>
+      <Button x:Name="tabAts" Content="美卡（ATS）" Width="140" Height="36"
+              Background="Transparent" Foreground="#333" BorderBrush="#CCC"
+              CornerRadius="6" Click="OnTabClick" Tag="ats"/>
+      <Button Content="刷新" Margin="12,0,0,0" Width="70" Height="36"
+              CornerRadius="6" Click="OnRefreshClick"/>
+      <TextBlock x:Name="sourceHint" VerticalAlignment="Center" Margin="12,0,0,0"
+                 FontSize="12" Foreground="#888"/>
+    </StackPanel>
+
+    <TextBlock x:Name="placeholder" DockPanel.Dock="Top"
+               Text="资讯（RSS）为 P1 功能：欧卡/美卡 双源各挂一个 RSS（默认 SCS Blog），按游戏版本过滤。P0 仅预留界面。"
+               Foreground="#999" TextWrapping="Wrap" Margin="0,40"/>
+
+    <ItemsControl x:Name="list" ItemsSource="{Binding Items}">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate>
+          <Border Padding="14,10" BorderBrush="#EEE" BorderThickness="0,0,0,1" Margin="0,0,0,0">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Right" Text="{Binding DateText}" FontSize="12" Foreground="#999"/>
+              <TextBlock Text="{Binding Title}" FontSize="14" TextWrapping="Wrap"/>
+            </DockPanel>
+          </Border>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+  </DockPanel>
+</UserControl>

@@ -1,0 +1,116 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="VTC.Client.Views.SettingsView"
+             x:Name="root">
+
+  <UserControl.Styles>
+    <Style Selector="TextBlock.h">
+      <Setter Property="FontSize" Value="16"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="Margin" Value="0,14,0,8"/>
+    </Style>
+    <Style Selector="TextBlock.lbl">
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Margin" Value="0,0,0,4"/>
+    </Style>
+    <Style Selector="TextBox.path">
+      <Setter Property="Height" Value="36"/>
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="Padding" Value="8,0"/>
+      <!-- 单行文字垂直居中（Padding 垂直=0 时默认贴顶 → 文字偏上） -->
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+  </UserControl.Styles>
+
+  <ScrollViewer>
+    <StackPanel Margin="24,16,24,0" MaxWidth="860" HorizontalAlignment="Left">
+
+      <TextBlock Classes="h" Text="目录设置"/>
+      <!-- 三行目录统一用 Grid（*,Auto）：TextBox 占 * 列自动伸缩+截断，Button 占 Auto 列贴右。
+           不用 DockPanel（无 Dock 的 TextBox 在长文本时 DesiredSize 撑开会错位，见"游戏文档目录"行）。 -->
+      <Grid ColumnDefinitions="110,*" Margin="0,0,0,2">
+        <TextBlock Grid.Column="0" Text="存档目录" Classes="lbl" VerticalAlignment="Center"/>
+        <Grid Grid.Column="1" ColumnDefinitions="*,Auto">
+          <!-- TextBox 单行模式内容超宽自动横滚，不撑开 * 列；MinWidth=0 确保不强制最小宽 -->
+          <TextBox Grid.Column="0" x:Name="saveDir" Classes="path" IsReadOnly="True" MinWidth="0"/>
+          <Button Grid.Column="1" Content="选择…" Width="80" Margin="8,0,0,0"
+                  Click="OnPickSaveDir" CornerRadius="6"/>
+        </Grid>
+      </Grid>
+      <TextBlock Text="用于定位 SaveData 文件夹（profile 存档），下载/部署活动存档到此。"
+                 FontSize="12" Foreground="#888" Margin="110,2,0,10" TextWrapping="Wrap"/>
+
+      <Grid ColumnDefinitions="110,*" Margin="0,0,0,2">
+        <TextBlock Grid.Column="0" Text="游戏目录" Classes="lbl" VerticalAlignment="Center"/>
+        <Grid Grid.Column="1" ColumnDefinitions="*,Auto">
+          <TextBox Grid.Column="0" x:Name="gameDir" Classes="path" IsReadOnly="True" MinWidth="0"/>
+          <Button Grid.Column="1" Content="选择…" Width="80" Margin="8,0,0,0"
+                  Click="OnPickGameDir" CornerRadius="6"/>
+        </Grid>
+      </Grid>
+      <TextBlock Text="游戏安装目录（DLC 检测/裁剪扫描 dlc_*.scs），如 …\steamapps\common\Euro Truck Simulator 2。"
+                 FontSize="12" Foreground="#888" Margin="110,2,0,4" TextWrapping="Wrap"/>
+
+      <Grid ColumnDefinitions="110,*" Margin="0,0,0,2">
+        <TextBlock Grid.Column="0" Text="游戏文档目录" Classes="lbl" VerticalAlignment="Center"/>
+        <Grid Grid.Column="1" ColumnDefinitions="*,Auto">
+          <TextBox Grid.Column="0" x:Name="gameDocDir" Classes="path" IsReadOnly="True" MinWidth="0"/>
+          <Button Grid.Column="1" Content="选择…" Width="80" Margin="8,0,0,0"
+                  Click="OnPickGameDoc" CornerRadius="6"/>
+        </Grid>
+      </Grid>
+      <TextBlock Text="游戏文档目录（profiles 所在，3C 三文件来源），默认 %USERPROFILE%\Documents\Euro Truck Simulator 2。"
+                 FontSize="12" Foreground="#888" Margin="110,2,0,4" TextWrapping="Wrap"/>
+
+      <TextBlock Classes="h" Text="当前活动存档（部署状态）"/>
+      <Grid ColumnDefinitions="160,*">
+        <TextBlock Grid.Column="0" Text="活动 profile" Classes="lbl" VerticalAlignment="Center"/>
+        <TextBlock Grid.Column="1" x:Name="activeProfile" VerticalAlignment="Center"/>
+      </Grid>
+      <Grid ColumnDefinitions="160,*" Margin="0,6,0,0">
+        <TextBlock Grid.Column="0" Text="DLC 备份目录" Classes="lbl" VerticalAlignment="Center"/>
+        <TextBlock Grid.Column="1" x:Name="activeDlc" VerticalAlignment="Center" TextWrapping="Wrap"/>
+      </Grid>
+      <Button x:Name="uninstallBtn" Content="卸载活动存档（还原 DLC + 3C + 移除部署）"
+              Margin="0,12,0,0" HorizontalAlignment="Left" Width="360" Height="38"
+              Background="#C62828" Foreground="White" CornerRadius="6"
+              Click="OnUninstallClick"/>
+
+      <TextBlock Classes="h" Text="更新"/>
+      <StackPanel Orientation="Horizontal">
+        <Button x:Name="checkUpdateBtn" Content="检查更新" Width="120" Height="38"
+                CornerRadius="6" Background="{DynamicResource vtc_accent}" Foreground="White"
+                Click="OnCheckUpdateClick"/>
+        <TextBlock x:Name="updateStatus" VerticalAlignment="Center" FontSize="13"/>
+      </StackPanel>
+
+      <TextBlock Classes="h" Text=".env 回显（只读，脱敏）"/>
+      <ItemsControl x:Name="envList">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate>
+            <Grid ColumnDefinitions="220,*" Margin="0,2">
+              <TextBlock Grid.Column="0" Text="{Binding Key}" FontSize="12"
+                         Foreground="#666" FontFamily="Consolas"/>
+              <TextBlock Grid.Column="1" Text="{Binding Value}" FontSize="12"
+                         FontFamily="Consolas" TextWrapping="Wrap"/>
+            </Grid>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <TextBlock Classes="h" Text="日志"/>
+      <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+        <Button Content="刷新日志" Width="90" Height="32" CornerRadius="6" Click="OnRefreshLogClick"/>
+        <ComboBox x:Name="logLines" Width="90" SelectedIndex="2">
+          <ComboBoxItem Content="50 行"/>
+          <ComboBoxItem Content="100 行"/>
+          <ComboBoxItem Content="200 行"/>
+          <ComboBoxItem Content="500 行"/>
+        </ComboBox>
+      </StackPanel>
+      <TextBox x:Name="logText" Height="220" FontFamily="Consolas" FontSize="12"
+               IsReadOnly="True" TextWrapping="NoWrap" CornerRadius="6"
+               AcceptsReturn="True"/>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

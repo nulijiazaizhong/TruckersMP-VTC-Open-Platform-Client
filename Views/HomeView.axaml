@@ -1,0 +1,135 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:VTC.Client.ViewModels"
+             x:Class="VTC.Client.Views.HomeView"
+             x:Name="root">
+
+  <UserControl.Styles>
+    <Style Selector="Border.event-card">
+      <Setter Property="Background" Value="White"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="BorderBrush" Value="#E0E0E0"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Margin" Value="0,0,0,14"/>
+    </Style>
+    <Style Selector="Button.deploy-btn">
+      <Setter Property="Background" Value="{DynamicResource vtc_accent}"/>
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="Height" Value="38"/>
+      <Setter Property="Padding" Value="18,0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="Button.deploy-btn:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource vtc_accent_hover}"/>
+    </Style>
+    <Style Selector="Button.deploy-btn:disabled /template/ ContentPresenter">
+      <Setter Property="Background" Value="#999"/>
+    </Style>
+    <Style Selector="Border.anno-item">
+      <Setter Property="Padding" Value="14,10"/>
+      <Setter Property="BorderBrush" Value="#EEE"/>
+      <Setter Property="BorderThickness" Value="0,0,0,1"/>
+      <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Border.anno-item:pointerover">
+      <Setter Property="Background" Value="#F5F8FF"/>
+    </Style>
+  </UserControl.Styles>
+
+  <DockPanel Margin="20,16,20,0">
+    <!-- 一键部署进度/状态条 -->
+    <Border DockPanel.Dock="Top" Background="#0F1B2D" CornerRadius="8" Padding="14,10"
+            Margin="0,0,0,14" IsVisible="{Binding IsDeploying}">
+      <StackPanel>
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Right" Text="{Binding DeployProgress, StringFormat='{}{0:F0}%'}"
+                     Foreground="White" FontWeight="Bold"/>
+          <TextBlock Text="{Binding DeployStatus}" Foreground="White" FontWeight="SemiBold"/>
+        </DockPanel>
+        <ProgressBar Value="{Binding DeployProgress}" Maximum="100" Minimum="0"
+                     Height="5" Foreground="{DynamicResource vtc_accent}"/>
+        <TextBox Text="{Binding DeployLog}" IsReadOnly="True" Background="Transparent"
+                 Foreground="#9FD" FontSize="12" TextWrapping="Wrap" MaxHeight="120"
+                 BorderThickness="0"/>
+      </StackPanel>
+    </Border>
+
+    <!-- 更新提示（右下角浮动）-->
+    <Border DockPanel.Dock="Bottom" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+            Background="#2B2B2B" CornerRadius="8" Padding="14,10" Margin="0,0,8,8"
+            IsVisible="{Binding ShowUpdatePrompt}">
+      <StackPanel MaxWidth="340">
+        <TextBlock Text="检测到软件更新" Foreground="White" FontWeight="SemiBold"/>
+        <TextBlock Text="{Binding UpdateText}" Foreground="#CCC" TextWrapping="Wrap" FontSize="12"/>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+          <Button Content="是" Width="52" Height="30" Click="OnUpdateYes"
+                  Background="{DynamicResource vtc_accent}" Foreground="White" CornerRadius="4"/>
+          <Button Content="否" Width="52" Height="30" Click="OnUpdateNo"
+                  Background="#555" Foreground="White" CornerRadius="4"/>
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <ScrollViewer>
+      <StackPanel>
+        <!-- 活动卡片流 -->
+        <TextBlock Text="活动" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
+        <ItemsControl ItemsSource="{Binding Events}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Border Classes="event-card" Padding="18,16">
+                <DockPanel>
+                  <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center" Margin="16,0,0,0"
+                              Orientation="Vertical" MinWidth="120" HorizontalAlignment="Right">
+                    <Button Classes="deploy-btn" Content="部署存档"
+                            Tag="{Binding}" Click="OnDeployClick"/>
+                    <TextBlock Text="{Binding StatusText}" FontSize="12"
+                               HorizontalAlignment="Right" Foreground="#888"/>
+                  </StackPanel>
+                  <StackPanel>
+                    <TextBlock Text="{Binding Name}" FontSize="17" FontWeight="SemiBold"/>
+                    <WrapPanel Margin="0,4,0,0">
+                      <TextBlock><Run Text="活动时间："/><Run Text="{Binding ActivityAtText}"/></TextBlock>
+                      <TextBlock><Run Text="发车时间："/><Run Text="{Binding DepartAtText}"/></TextBlock>
+                      <TextBlock><Run Text="活动服务器："/><Run Text="{Binding Server}"/></TextBlock>
+                      <TextBlock><Run Text="导航："/><Run Text="{Binding Navigation}"/></TextBlock>
+                    </WrapPanel>
+                    <TextBlock Text="{Binding RequiresMapDlcText}" FontSize="12"
+                               Foreground="#B7791F" IsVisible="{Binding HasRequiresMapDlc}"/>
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- 公告列表 -->
+        <TextBlock Text="公告" FontSize="18" FontWeight="Bold" Margin="0,14,0,8"/>
+        <ItemsControl ItemsSource="{Binding Announcements}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Border Classes="anno-item">
+                <DockPanel>
+                  <Ellipse DockPanel.Dock="Left" Width="8" Height="8" Margin="0,6,10,0"
+                           Fill="{Binding UnreadDot}" VerticalAlignment="Top"/>
+                  <StackPanel>
+                    <DockPanel>
+                      <TextBlock DockPanel.Dock="Right" Text="{Binding PublishedAtText}"
+                                 FontSize="12" Foreground="#999"/>
+                      <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="Medium"
+                                 Foreground="{Binding TitleBrush}"/>
+                    </DockPanel>
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock x:Name="emptyHint" Text="暂无活动与公告" Foreground="#999"
+                   HorizontalAlignment="Center" Margin="0,30" IsVisible="{Binding IsEmpty}"/>
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

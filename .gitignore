@@ -1,0 +1,14 @@
+# Build
+bin/
+obj/
+vtc-verify/
+*.binlog
+*.log
+
+# Local dev data / secrets
+.env
+.vtc-data/
+
+# IDE
+.vs/
+.vscode/

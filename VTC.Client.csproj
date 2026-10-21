@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+    <Version>0.3.0</Version>
+    <!-- exe 文件图标（资源管理器里 .exe 的图标，编译期固定，.env 无法改已编译的 exe 图标）。
+         指向 app-assets\app.ico；该文件不存在时条件不成立 → 用 .NET 默认图标，不报错。
+         运行时窗口/任务栏图标用 .env VTC_APP_ICON 覆盖（见 App.ApplyAppIconAsync）。 -->
+    <ApplicationIcon Condition="Exists('app-assets\app.ico')">app-assets\app.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.22" />
+    <!-- 双控件库约定（规划 §4.3）：Semi = 基础控件/品牌一致性（登录、设置、首页、个人中心）；
+         Irihi.Ursa（Ursa.Avalonia）= 业务组件（表格/通知/抽屉，资讯与列表密集处）。
+         同一页面只用一套基础控件。 -->
+    <PackageReference Include="Semi.Avalonia" Version="11.0.7.7" />
+    <PackageReference Include="Irihi.Ursa" Version="1.15.1" />
+    <PackageReference Include="Irihi.Ursa.Themes.Semi" Version="1.15.1" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.FileExtensions" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.1" />
+    <PackageReference Include="DryIoc" Version="5.4.3" />
+    <PackageReference Include="Serilog" Version="4.3.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="8.0.0" />
+    <!-- System.Net.Http.Json 是 .NET 10 内置框架程序集，无需 PackageReference（NU1510）。
+         代码里 using System.Net.Http.Json; 用框架自带版本，JsonContent/ReadFromJsonAsync 等可用。 -->
+    <PackageReference Include="Markdig" Version="0.41.1" />
+    <!-- 升级 0.48.0：修复 GHSA-6c8g-7p36-r338（Zip Slip 目录遍历，WriteToDirectory），
+         客户端用 SharpCompress 解压存档包，此漏洞为真实风险。 -->
+    <PackageReference Include="SharpCompress" Version="0.48.0" />
+    <!-- Windows DPAPI（token 加密，CurrentUser 作用域）；跨平台包，macOS/Linux 运行时走 AES-GCM 回退 -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VTC.Shared\VTC.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

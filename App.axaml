@@ -1,0 +1,15 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="VTC.Client.App">
+    <Application.Styles>
+        <FluentTheme />
+        <!-- 全局：所有按钮文字上下左右居中。
+             FluentTheme 默认 HorizontalContentAlignment 对部分按钮是 Left/继承，导致文字偏左。
+             显式设 Center 让内容（文字）在按钮框内水平+垂直居中。
+             更具体的选择器（如 .nav-item 的 Left）优先级更高，会覆盖此全局值 → 导航按钮保持左对齐。 -->
+        <Style Selector="Button">
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+    </Application.Styles>
+</Application>

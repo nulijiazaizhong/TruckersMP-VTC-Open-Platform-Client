@@ -1,0 +1,98 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:VTC.Client.ViewModels"
+        xmlns:views="using:VTC.Client.Views"
+        xmlns:converters="using:VTC.Client"
+        x:Class="VTC.Client.Views.MainWindow"
+        Title="{DynamicResource vtc_team_name}"
+        Width="1180" Height="720"
+        MinWidth="960" MinHeight="600"
+        WindowStartupLocation="CenterScreen">
+
+  <Window.Resources>
+    <converters:InvertBoolConverter x:Key="InvertBoolConverter"/>
+  </Window.Resources>
+
+  <Window.Styles>
+    <!-- 导航按钮：选中态用品牌强调色 -->
+    <Style Selector="Button.nav-item">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <!-- 关键：Button 默认 HorizontalAlignment=Auto（按内容宽），导致背景/选中块只包文字、显得"太小"。
+           设 Stretch 让按钮铺满侧边栏宽（减 Margin），hover/选中背景随之铺满整行 → "蓝色框铺满"效果。 -->
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Padding" Value="18,12"/>
+      <Setter Property="Margin" Value="10,3"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="FontSize" Value="15"/>
+      <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <!-- 背景设在 Button 本身：FluentTheme 的 Button template 用 TemplateBinding Background 渲染，
+         精确贴合 Button 尺寸（CornerRadius+Padding 一致）。此前设在 /template/ ContentPresenter 上，
+         其布局范围与 Button 可视区不一致 → hover/选中背景"凸出"比按钮大、高度偏高、颜色发灰。
+         hover 用 :pointerover 伪类选择器，选中用 .active 类（由 ShowPage 在 code-behind 管理）。 -->
+    <Style Selector="Button.nav-item:pointerover">
+      <Setter Property="Background" Value="#22FFFFFF"/>
+    </Style>
+    <Style Selector="Button.nav-item.active">
+      <Setter Property="Background" Value="{DynamicResource vtc_accent}"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+    <!-- 选中态优先于 hover：鼠标悬停在已选中按钮上时仍显示强调色 -->
+    <Style Selector="Button.nav-item.active:pointerover">
+      <Setter Property="Background" Value="{DynamicResource vtc_accent}"/>
+    </Style>
+  </Window.Styles>
+
+  <Design.PreviewWith>
+    <vm:ShellViewModel/>
+  </Design.PreviewWith>
+
+  <!-- 用 Grid（无列/行定义 → 子元素 Stretch 到整窗叠放）。
+       此前用 Panel：Panel 基类不 Stretch 子元素（按 DesiredSize 放左上），
+       导致 LoginView 只占卡片宽、偏左上、右侧大片空白。 -->
+  <Grid>
+    <!-- ===== 登录层（独立全屏，未登录时可见）===== -->
+    <views:LoginView x:Name="loginView" IsVisible="{Binding IsAuthenticated, Converter={StaticResource InvertBoolConverter}}"/>
+
+    <!-- ===== 主框架（已登录）===== -->
+    <!-- 不画自定义标题栏：系统标题栏已显示车队名（Title=vtc_team_name）+ 窗口控制按钮，
+         两套叠加会导致内容被挤偏。删掉自定义蓝条后，输入框/控件不再偏移。 -->
+    <DockPanel IsVisible="{Binding IsAuthenticated}">
+
+      <!-- 左侧导航 -->
+      <Border DockPanel.Dock="Left" Width="200" Background="#1B1B1F">
+        <DockPanel Margin="0,12">
+          <StackPanel DockPanel.Dock="Top" Margin="16,4,16,12">
+            <Image Width="40" Height="40" Stretch="Uniform" Source="{Binding BrandLogo}"/>
+            <TextBlock Text="{Binding TeamName}" Foreground="White" FontSize="15"
+                       FontWeight="SemiBold" Margin="0,8,0,0" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding TeamSlogan}" Foreground="#9AA" FontSize="11"
+                       Margin="0,3,0,0" TextWrapping="Wrap"/>
+          </StackPanel>
+
+          <StackPanel DockPanel.Dock="Bottom" Margin="10,0,10,8">
+            <Button Classes="nav-item" Content="退出登录" Foreground="#F88"
+                    Click="OnLogout" HorizontalAlignment="Stretch"/>
+            <TextBlock Text="VTC Client 0.3.0 · zh-CN" Foreground="#667" FontSize="10"
+                       Margin="8,6,0,0"/>
+          </StackPanel>
+
+          <StackPanel>
+            <Button Classes="nav-item" Content="首页" Tag="home" Click="OnNavClick"/>
+            <Button Classes="nav-item" Content="资讯" Tag="news" Click="OnNavClick"/>
+            <Button Classes="nav-item" Content="设置" Tag="settings" Click="OnNavClick"/>
+            <Button x:Name="adminNav" Classes="nav-item" Content="管理" Tag="admin" Click="OnNavClick"
+                     IsVisible="{Binding IsAdmin}"/>
+            <Button Classes="nav-item" Content="个人中心" Tag="profile" Click="OnNavClick"/>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+
+      <!-- 右侧内容区 -->
+      <ContentControl x:Name="contentHost" Margin="0"/>
+    </DockPanel>
+  </Grid>
+</Window>

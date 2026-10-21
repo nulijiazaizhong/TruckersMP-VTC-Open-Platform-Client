@@ -1,0 +1,105 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:VTC.Client.ViewModels"
+             x:Class="VTC.Client.Views.LoginView">
+
+  <UserControl.Styles>
+    <!-- 深色主题输入框：深底 + 浅字 + 深灰边框（此前无 Background/Foreground，在白色卡片上显黑/灰、看不见） -->
+    <Style Selector="TextBox.field">
+      <Setter Property="Height" Value="38"/>
+      <Setter Property="Margin" Value="0,4,0,10"/>
+      <Setter Property="Padding" Value="10,0"/>
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Background" Value="#2A2F38"/>
+      <Setter Property="Foreground" Value="#E0E4EA"/>
+      <Setter Property="BorderBrush" Value="#3A4150"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+    <!-- 深色主题标签：浅灰（此前 #222 在深底上不可见） -->
+    <Style Selector="TextBlock.lbl">
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Margin" Value="0,0,0,3"/>
+      <Setter Property="Foreground" Value="#B8C0C8"/>
+    </Style>
+    <Style Selector="Button.login-btn">
+      <Setter Property="Height" Value="42"/>
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="Background" Value="{DynamicResource vtc_accent}"/>
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontSize" Value="15"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Margin" Value="0,6,0,0"/>
+    </Style>
+    <Style Selector="Button.login-btn:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource vtc_accent_hover}"/>
+    </Style>
+    <Style Selector="Button.login-btn:disabled /template/ ContentPresenter">
+      <Setter Property="Background" Value="#999"/>
+    </Style>
+    <Style Selector="Button.account-btn">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="6,2"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+  </UserControl.Styles>
+
+  <Grid Background="#101418">
+    <!-- 背景图（code-behind 按版式摆放：center 整屏 / split 放到图那一侧）-->
+    <Image x:Name="bgImage" Stretch="UniformToFill"/>
+
+    <!-- ===== 品牌 + 表单 单一区块（按版式定位/容器）===== -->
+    <!-- 深色卡片（比背景 #101418 略亮形成层次 + 深灰边框）。此前 #E6FFFFFF 纯白在深色主题下刺眼。 -->
+    <Border x:Name="formContainer" CornerRadius="12" Padding="34,28"
+            Background="#1E2228" BorderBrush="#2E3440" BorderThickness="1"
+            HorizontalAlignment="Center" VerticalAlignment="Center"
+            Width="380">
+      <StackPanel>
+        <!-- 车队名 + slogan -->
+        <StackPanel HorizontalAlignment="Center" Margin="0,0,0,18">
+          <Image x:Name="logo" Width="54" Height="54" Stretch="Uniform"
+                 HorizontalAlignment="Center" Margin="0,0,0,10"/>
+          <TextBlock x:Name="teamName" Text="车队" FontSize="26" FontWeight="Bold"
+                     HorizontalAlignment="Center" TextWrapping="Wrap"/>
+          <TextBlock x:Name="slogan" Text="" FontSize="13" Foreground="#8890A0"
+                     HorizontalAlignment="Center" Margin="0,4,0,0" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- 多账号切换（已记住账号下拉）-->
+        <StackPanel x:Name="accountPanel" Margin="0,0,0,10" IsVisible="False">
+          <TextBlock Text="已记住的账号" Classes="lbl" Foreground="#8890A0"/>
+          <StackPanel x:Name="accountList" Orientation="Horizontal"/>
+        </StackPanel>
+
+        <!-- 表单 -->
+        <TextBlock Text="用户名" Classes="lbl"/>
+        <TextBox x:Name="username" Classes="field" Tag=""/>
+        <TextBlock Text="密码" Classes="lbl"/>
+        <TextBox x:Name="pwd" Classes="field" Tag="" PasswordChar="•"/>
+
+        <CheckBox x:Name="remember" Content="记住我" Margin="0,2,0,6"/>
+
+        <!-- TM:MP 身份绑定（P0 预留，可折叠）-->
+        <Expander Header="TM:MP 身份绑定（可选）" IsExpanded="False" Margin="0,4,0,8">
+          <StackPanel Margin="0,6,0,0">
+            <TextBlock Text="TM:MP 玩家 ID" Classes="lbl"/>
+            <TextBox x:Name="tmpId" Classes="field" Tag=""/>
+          </StackPanel>
+        </Expander>
+
+        <Button x:Name="loginBtn" Content="登 录" Classes="login-btn"
+                HorizontalAlignment="Stretch"/>
+
+        <TextBlock x:Name="errorText" Text="" Foreground="#D33" FontSize="12"
+                   Margin="0,10,0,0" TextWrapping="Wrap"/>
+        <ProgressBar x:Name="loginProgress" IsIndeterminate="False" Maximum="100"
+                     Minimum="0" Value="0" Height="4" Margin="0,8,0,0"
+                     IsVisible="False"/>
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>
