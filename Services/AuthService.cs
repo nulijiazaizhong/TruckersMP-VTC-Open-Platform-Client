@@ -208,13 +208,17 @@ public sealed class AuthService : IAuthService
 
     #region Refresh
 
-    /// <summary>IAuthService.TryRefresh（供 ApiClient 401 重试）。同步包装异步刷新。</summary>
-    public string? TryRefresh()
+    /// <summary>
+    /// IAuthService.TryRefreshAsync（供 ApiClient 401 重试）。
+    /// 必须异步：此前 .GetAwaiter().GetResult() 在 UI 线程同步阻塞，
+    /// 而 RefreshAsync 的 HTTP 完成回调需回 UI 线程 → 死锁（个人中心卡死根因）。
+    /// </summary>
+    public async Task<string?> TryRefreshAsync()
     {
         if (string.IsNullOrWhiteSpace(RefreshToken)) return null;
         try
         {
-            var result = RefreshAsync(RefreshToken).GetAwaiter().GetResult();
+            var result = await RefreshAsync(RefreshToken);
             return result?.AccessToken;
         }
         catch (Exception ex)

@@ -117,10 +117,9 @@ public sealed class ApiClient : IApiClient
         {
             using var req = new HttpRequestMessage(HttpMethod.Get, BuildUri(path, query));
             if (useAuth) ApplyAuth(req);
-            // resp 不在此 dispose：生命周期交给 SendWithRetryAsync（它内部 using 管理），
-            // 否则 return 后 using 立即释放 HttpResponseMessage，外层再读 Content 会抛
-            // "Cannot access a disposed object: HttpConnectionResponseContent"。
+            _log.LogInformation("[Http探针] GET {Url} 即将 SendAsync", req.RequestUri);
             var resp = await Http.SendAsync(req, ct);
+            _log.LogInformation("[Http探针] GET {Url} SendAsync 返回 {Status}", req.RequestUri, (int)resp.StatusCode);
             return resp;
         }, useAuth);
     }
@@ -187,7 +186,12 @@ public sealed class ApiClient : IApiClient
     private async Task<T?> SendWithRetryAsync<T>(
         Func<CancellationToken, Task<HttpResponseMessage>> send, bool useAuth)
     {
-        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+        // 注意：此 CTS 的超时是 SendAsync 实际使用的取消令牌（传入 send lambda）。
+        // 此前 5 分钟 → 即便 HttpClient.Timeout 设 20s，SendAsync 仍按此 5min 令牌等待，
+        // 挂起时表现为 UI 卡死 5 分钟。现设 25s（略大于 HttpClient 的 20s Timeout，
+        // 让 HttpClient 自身超时先触发，此 CTS 作为兜底）。
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+        _log.LogDebug("SendWithRetry 进入（path 由调用方记）");
         using var resp = await send(cts.Token);
         var text = await resp.Content.ReadAsStringAsync(cts.Token);
 
@@ -255,7 +259,8 @@ public sealed class ApiClient : IApiClient
         {
             if (_refreshing) return null;
             _refreshing = true;
-            return auth.TryRefresh();
+            // 异步刷新（绝不 .GetResult() 同步阻塞 UI 线程——那是死锁源）。
+            return await auth.TryRefreshAsync();
         }
         finally
         {
@@ -270,7 +275,11 @@ public interface IAuthService
     string? AccessToken { get; }
     string? RefreshToken { get; }
     bool IsAuthenticated { get; }
-    /// <summary>access token 过期时尝试刷新；成功返回新 access token，失败返回 null。</summary>
-    string? TryRefresh();
+    /// <summary>
+    /// access token 过期时尝试刷新；成功返回新 access token，失败返回 null。
+    /// 必须异步：此前用 .GetAwaiter().GetResult() 同步包装，在 UI 线程触发 401 刷新时
+    /// 会同步阻塞 UI 线程，而刷新的 HTTP 完成回调又需回到 UI 线程 → 死锁（个人中心卡死根因）。
+    /// </summary>
+    Task<string?> TryRefreshAsync();
     event EventHandler? AuthChanged;
 }
