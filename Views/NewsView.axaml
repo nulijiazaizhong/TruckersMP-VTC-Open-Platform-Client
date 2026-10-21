@@ -1,6 +1,5 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:VTC.Client.ViewModels"
              x:Class="VTC.Client.Views.NewsView"
              x:Name="root">
   <DockPanel Margin="20,16,20,0">
@@ -10,25 +9,44 @@
               Background="{DynamicResource vtc_accent}" Foreground="White"
               CornerRadius="6" Click="OnTabClick" Tag="ets2"/>
       <Button x:Name="tabAts" Content="美卡（ATS）" Width="140" Height="36"
-              Background="Transparent" Foreground="#333" BorderBrush="#CCC"
+              Background="Transparent" Foreground="#BBB" BorderBrush="#444"
               CornerRadius="6" Click="OnTabClick" Tag="ats"/>
-      <Button Content="刷新" Margin="12,0,0,0" Width="70" Height="36"
+      <Button x:Name="btnRefresh" Content="刷新" Margin="12,0,0,0" Width="70" Height="36"
               CornerRadius="6" Click="OnRefreshClick"/>
       <TextBlock x:Name="sourceHint" VerticalAlignment="Center" Margin="12,0,0,0"
                  FontSize="12" Foreground="#888"/>
     </StackPanel>
 
-    <TextBlock x:Name="placeholder" DockPanel.Dock="Top"
-               Text="资讯（RSS）为 P1 功能：欧卡/美卡 双源各挂一个 RSS（默认 SCS Blog），按游戏版本过滤。P0 仅预留界面。"
-               Foreground="#999" TextWrapping="Wrap" Margin="0,40"/>
+    <!-- 加载状态 -->
+    <TextBlock x:Name="loadingHint" DockPanel.Dock="Top"
+               Text="正在加载资讯…" Foreground="#888" Margin="0,20,0,0"
+               IsVisible="False"/>
 
-    <ItemsControl x:Name="list" ItemsSource="{Binding Items}">
+    <!-- 空状态 -->
+    <TextBlock x:Name="emptyHint" DockPanel.Dock="Top"
+               Text="暂无资讯（RSS 源可能不可达或无新内容）"
+               Foreground="#999" HorizontalAlignment="Center" Margin="0,40"
+               IsVisible="False"/>
+
+    <!-- 资讯列表 -->
+    <ItemsControl x:Name="list">
       <ItemsControl.ItemTemplate>
         <DataTemplate>
-          <Border Padding="14,10" BorderBrush="#EEE" BorderThickness="0,0,0,1" Margin="0,0,0,0">
+          <Border Padding="14,12" BorderBrush="#333" BorderThickness="0,0,0,1" Margin="0,0,0,0">
             <DockPanel>
-              <TextBlock DockPanel.Dock="Right" Text="{Binding DateText}" FontSize="12" Foreground="#999"/>
-              <TextBlock Text="{Binding Title}" FontSize="14" TextWrapping="Wrap"/>
+              <StackPanel DockPanel.Dock="Right" MinWidth="90" Margin="12,0,0,0"
+                          VerticalAlignment="Top" HorizontalAlignment="Right">
+                <TextBlock Text="{Binding DateText}" FontSize="12" Foreground="#888"/>
+                <TextBlock Text="{Binding GameVersionTag}" FontSize="11" Foreground="#666"
+                           Margin="0,2,0,0"/>
+              </StackPanel>
+              <StackPanel>
+                <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="Medium"
+                           Foreground="#E0E0E0" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding Summary}" FontSize="12" Foreground="#999"
+                           TextWrapping="Wrap" Margin="0,4,0,0"
+                           IsVisible="{Binding HasSummary}"/>
+              </StackPanel>
             </DockPanel>
           </Border>
         </DataTemplate>

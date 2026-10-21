@@ -16,7 +16,18 @@ public static class VtcApi
     public const string DlcMapTemplate = Prefix + "/dlc/map-template";
     public const string DlcRequired = Prefix + "/dlc/required";
     public const string DlcReport = Prefix + "/dlc/report";
+    public const string DlcDisable = Prefix + "/dlc/disable";
+    public const string DlcRestore = Prefix + "/dlc/restore";
     public const string Updates = "/updates";
+
+    // P1
+    public const string EventLogs = Prefix + "/event-logs";
+    public const string Leaderboard = Prefix + "/leaderboard";
+    public const string SaveUploadCredential = Prefix + "/saves/upload-credential";
+    public const string SavePublish = Prefix + "/saves/{id}/publish";
+    public const string SaveUnpublish = Prefix + "/saves/{id}/unpublish";
+    public const string Members = Prefix + "/members";
+    public const string MemberDetail = Prefix + "/members/{id}";
 }
 
 /// <summary>本地路径约定（p0-contract.md §7）。</summary>

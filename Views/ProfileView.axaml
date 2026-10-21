@@ -5,9 +5,6 @@
 
   <UserControl.Styles>
     <Style Selector="TextBlock.h"><Setter Property="FontSize" Value="16"/><Setter Property="FontWeight" Value="Bold"/><Setter Property="Margin" Value="0,14,0,8"/></Style>
-    <!-- 卡片背景用深色（比窗口 #1B1B1F 略亮，形成层次），不用纯白：
-         此前 Background=White 在深色主题下刺眼，且文字 Foreground 跟随主题浅色默认 → 白底浅字看不见。
-         深底 + 主题浅字 = 正常可读。 -->
     <Style Selector="Border.info-card"><Setter Property="Background" Value="#26262B"/><Setter Property="CornerRadius" Value="10"/><Setter Property="BorderBrush" Value="#3A3A40"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Padding" Value="18,14"/></Style>
     <Style Selector="TextBlock.k"><Setter Property="FontSize" Value="12"/><Setter Property="Foreground" Value="#888"/><Setter Property="Margin" Value="0,0,0,2"/></Style>
     <Style Selector="TextBlock.v"><Setter Property="FontSize" Value="14"/><Setter Property="Margin" Value="0,0,0,10"/></Style>
@@ -20,9 +17,6 @@
       <Border Classes="info-card">
         <StackPanel>
           <TextBlock Text="成员信息" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,10"/>
-          <!-- 每行一个键值对（140 键 + * 值），纵向堆叠。
-               此前 140,*,140,* 四列挤一行：* 值列太窄导致值(如 admin)溢出与相邻键重叠；
-               且缺 RowDefinitions 使 Grid.Row=1/2 的行不渲染（车牌/车辆/状态丢失）。 -->
           <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12">
             <TextBlock Grid.Row="0" Grid.Column="0" Classes="k" Text="用户名"/>
             <TextBlock Grid.Row="0" Grid.Column="1" x:Name="fUsername" Classes="v"/>
@@ -38,7 +32,7 @@
         </StackPanel>
       </Border>
 
-      <!-- 我的活动记录 -->
+      <!-- 我的活动记录（C7 P1） -->
       <TextBlock Classes="h" Text="我的活动记录"/>
       <Border Classes="info-card">
         <StackPanel>
@@ -49,23 +43,29 @@
                   <Border DockPanel.Dock="Left" Width="10" Height="10" CornerRadius="5"
                           Background="{DynamicResource vtc_accent}" Margin="0,4,12,0"/>
                   <StackPanel>
-                    <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="Medium"/>
-                    <TextBlock Text="{Binding TimeText}" FontSize="12" Foreground="#888"/>
+                    <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="Medium"
+                               Foreground="#E0E0E0"/>
+                    <TextBlock Text="{Binding Detail}" FontSize="12" Foreground="#999"
+                               Margin="0,2,0,0"/>
+                    <TextBlock Text="{Binding TimeText}" FontSize="12" Foreground="#777"
+                               Margin="0,2,0,0"/>
                   </StackPanel>
                 </DockPanel>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
-          <TextBlock x:Name="recordsEmpty" Text="暂无活动记录（P1：手动 + 游戏内 VTC 回传的时间线）"
+          <TextBlock x:Name="recordsEmpty" Text="暂无活动记录"
                      Foreground="#999"/>
         </StackPanel>
       </Border>
 
-      <!-- 我的积分/排名 -->
+      <!-- 我的积分/排名（C11 P1） -->
       <TextBlock Classes="h" Text="我的积分 / 排名"/>
       <Border Classes="info-card">
         <StackPanel>
-          <TextBlock x:Name="pointsText" Text="积分：—（P1：参加一次活动 +N 分，排行榜聚合）" FontSize="14"/>
+          <TextBlock x:Name="pointsText" Text="积分：—" FontSize="14" Foreground="#E0E0E0"/>
+          <TextBlock x:Name="rankText" Text="排名：—" FontSize="13" Foreground="#999"
+                     Margin="0,4,0,0"/>
         </StackPanel>
       </Border>
 
@@ -73,7 +73,32 @@
       <TextBlock Classes="h" Text="当前活动存档"/>
       <Border Classes="info-card">
         <StackPanel>
-          <TextBlock x:Name="activeText" Text="（无）" FontSize="14"/>
+          <TextBlock x:Name="activeText" Text="（无）" FontSize="14" Foreground="#E0E0E0"/>
+        </StackPanel>
+      </Border>
+
+      <!-- 排行榜（C11 P1） -->
+      <TextBlock Classes="h" Text="排行榜（TOP 10）"/>
+      <Border Classes="info-card">
+        <StackPanel>
+          <ItemsControl x:Name="leaderboard">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Grid ColumnDefinitions="40,*,120,80" Margin="0,0,0,6">
+                  <TextBlock Grid.Column="0" Text="{Binding RankText}" FontSize="13"
+                             Foreground="{Binding RankBrush}" FontWeight="Bold"/>
+                  <TextBlock Grid.Column="1" Text="{Binding Username}" FontSize="13"
+                             Foreground="#E0E0E0"/>
+                  <TextBlock Grid.Column="2" Text="{Binding Plate}" FontSize="12"
+                             Foreground="#999"/>
+                  <TextBlock Grid.Column="3" Text="{Binding PointsText}" FontSize="13"
+                             Foreground="{DynamicResource vtc_accent}" FontWeight="SemiBold"
+                             HorizontalAlignment="Right"/>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock x:Name="lbEmpty" Text="暂无排名数据" Foreground="#999"/>
         </StackPanel>
       </Border>
     </StackPanel>

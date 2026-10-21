@@ -92,6 +92,9 @@ public class App : Application
         services.AddSingleton<UpdateService>();
         services.AddSingleton<UnreadService>();
         services.AddSingleton<PushClient>();
+        // P1
+        services.AddSingleton<SaveUploader>();
+        services.AddSingleton<RssService>();
         AppServiceLocator.Initialize(services);
 
         var sp = AppServiceLocator.Services;

@@ -1,0 +1,196 @@
+using System.IO;
+using System.Text;
+using System.Text.Json;
+using System.Xml.Linq;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using VTC.Client;
+
+namespace VTC.Client.Services;
+
+/// <summary>
+/// C9 资讯 RSS（P1）：欧卡(ETS2) / 美卡(ATS) 双源抓取 + 本地缓存 + 版本标签过滤。
+/// 默认源：SCS Blog feedburner（https://feeds.feedburner.com/ScsSoftwaresBlog）。
+/// 车队可在 .env 中覆盖 RSS_FEED_ETS2 / RSS_FEED_ATS。
+/// </summary>
+public sealed class RssService
+{
+    private readonly IApiClient _api;
+    private readonly IConfiguration _cfg;
+    private readonly ILogger<RssService> _log;
+    private readonly HttpClient _http;
+    private readonly string _cacheDir;
+
+    public RssService(IApiClient api, IConfiguration cfg, ILogger<RssService> log)
+    {
+        _api = api;
+        _cfg = cfg;
+        _log = log;
+        _http = new HttpClient(new SocketsHttpHandler
+        {
+            AutomaticDecompression = System.Net.DecompressionMethods.All,
+        })
+        {
+            Timeout = TimeSpan.FromSeconds(30),
+        };
+        _cacheDir = Path.Combine(Paths.CacheRoot, "rss");
+        Directory.CreateDirectory(_cacheDir);
+    }
+
+    public sealed class RssItem
+    {
+        public string Title { get; set; } = "";
+        public string Link { get; set; } = "";
+        public string? Summary { get; set; }
+        public DateTime PublishedAt { get; set; }
+        /// <summary>游戏版本标签（如 "1.61"），用于过滤。</summary>
+        public string? GameVersionTag { get; set; }
+        /// <summary>所属游戏：ets2 / ats / unknown。</summary>
+        public string Game { get; set; } = "unknown";
+        /// <summary>显示用日期文本。</summary>
+        public string DateText => PublishedAt.ToLocalTime().ToString("yyyy-MM-dd");
+        /// <summary>XAML 绑定：摘要是否可见。</summary>
+        public bool HasSummary => !string.IsNullOrWhiteSpace(Summary);
+    }
+
+    /// <summary>默认 SCS Blog feedburner 源。</summary>
+    private const string DefaultFeed = "https://feeds.feedburner.com/ScsSoftwaresBlog";
+
+    /// <summary>获取某游戏的 RSS 列表（本地缓存优先，30 分钟过期）。</summary>
+    public async Task<List<RssItem>> GetItemsAsync(string game, int take = 30, CancellationToken ct = default)
+    {
+        var feedUrl = GetFeedUrl(game);
+
+        // ① 尝试本地缓存
+        var cacheFile = Path.Combine(_cacheDir, $"{game}_{take}.json");
+        if (File.Exists(cacheFile))
+        {
+            var age = DateTime.Now - File.GetLastWriteTime(cacheFile);
+            if (age < TimeSpan.FromMinutes(30))
+            {
+                try
+                {
+                    var cached = JsonSerializer.Deserialize<List<RssItem>>(File.ReadAllText(cacheFile));
+                    if (cached is { Count: > 0 })
+                    {
+                        _log.LogDebug("RSS 缓存命中：{Game}（{Age}）", game, age.ToString(@"hh\:mm\:ss"));
+                        return cached;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _log.LogWarning("RSS 缓存读取失败，重新抓取：{Ex}", ex.Message);
+                }
+            }
+        }
+
+        // ② 在线抓取
+        List<RssItem> items;
+        try
+        {
+            _log.LogInformation("抓取 RSS：{Game} → {Url}", game, feedUrl);
+            var xml = await _http.GetStringAsync(feedUrl, ct);
+            items = ParseRss(xml, game);
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning("RSS 抓取失败（{Game}）：{Ex}", game, ex.Message);
+            // 回退：即使过期也用旧缓存
+            if (File.Exists(cacheFile))
+            {
+                try
+                {
+                    var stale = JsonSerializer.Deserialize<List<RssItem>>(File.ReadAllText(cacheFile));
+                    if (stale is { Count: > 0 })
+                    {
+                        _log.LogInformation("使用过期 RSS 缓存：{Game}", game);
+                        return stale;
+                    }
+                }
+                catch { /* ignore */ }
+            }
+            return [];
+        }
+
+        // ③ 写缓存
+        try
+        {
+            File.WriteAllText(cacheFile, JsonSerializer.Serialize(items));
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning("RSS 缓存写入失败：{Ex}", ex.Message);
+        }
+
+        return items;
+    }
+
+    /// <summary>按版本标签过滤（如只显示 1.61 的帖子）。</summary>
+    public List<RssItem> FilterByVersion(List<RssItem> items, string? versionMajor)
+    {
+        if (string.IsNullOrWhiteSpace(versionMajor)) return items;
+        return items.Where(i =>
+            i.GameVersionTag == null ||          // 无标签的通用帖子保留
+            i.GameVersionTag.StartsWith(versionMajor, StringComparison.OrdinalIgnoreCase)
+        ).ToList();
+    }
+
+    private string GetFeedUrl(string game)
+    {
+        var env = EnvLoader.Get(_cfg, game == "ets2" ? "RSS_FEED_ETS2" : "RSS_FEED_ATS");
+        return string.IsNullOrWhiteSpace(env) ? DefaultFeed : env!;
+    }
+
+    /// <summary>解析 RSS 2.0 XML → RssItem 列表。</summary>
+    internal static List<RssItem> ParseRss(string xml, string defaultGame)
+    {
+        var items = new List<RssItem>();
+        try
+        {
+            var doc = XDocument.Parse(xml);
+            foreach (var item in doc.Descendants("item").Take(50))
+            {
+                var title = item.Element("title")?.Value?.Trim() ?? "";
+                var link = item.Element("link")?.Value?.Trim() ?? "";
+                var desc = item.Element("description")?.Value?.Trim() ?? "";
+                var pubDate = item.Element("pubDate")?.Value?.Trim() ?? "";
+
+                DateTime date;
+                if (DateTime.TryParse(pubDate, out var d)) date = d;
+                else if (DateTime.TryParseExact(pubDate, "R", null, System.Globalization.DateTimeStyles.None, out d)) date = d;
+                else date = DateTime.Now;
+
+                // 推断游戏：标题含 ATS/American → ats，含 ETS/Euro → ets2
+                var game = defaultGame;
+                var lower = title.ToLowerInvariant();
+                if (lower.Contains("american") || lower.Contains("ats ")) game = "ats";
+                else if (lower.Contains("euro") || lower.Contains("ets2")) game = "ets2";
+
+                // 提取版本标签：匹配 "1.61" "1.60" 等模式
+                string? versionTag = null;
+                var verMatch = System.Text.RegularExpressions.Regex.Match(title + " " + desc, @"\b(\d+\.\d+)\b");
+                if (verMatch.Success) versionTag = verMatch.Groups[1].Value;
+
+                // 清理 description 中的 HTML 标签
+                var summary = System.Text.RegularExpressions.Regex.Replace(desc, "<[^>]+>", "").Trim();
+                if (summary.Length > 200) summary = summary[..200] + "…";
+
+                items.Add(new RssItem
+                {
+                    Title = title,
+                    Link = link,
+                    Summary = string.IsNullOrWhiteSpace(summary) ? null : summary,
+                    PublishedAt = date,
+                    GameVersionTag = versionTag,
+                    Game = game,
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            // XML 解析失败：返回空列表
+            System.Diagnostics.Debug.WriteLine($"RSS parse error: {ex.Message}");
+        }
+        return items;
+    }
+}
