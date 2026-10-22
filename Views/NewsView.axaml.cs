@@ -167,22 +167,23 @@ public partial class NewsView : UserControl
     /// </summary>
     private static string NormaliseHtml(string html)
     {
-        // 用引号把字符串切成「引号外 / 引号内」交替片段
+        // 归一化：只对**双引号**包裹的属性值去空白（修 URL 折行），其余原样保留。
+        // 关键：**单引号不当引号边界**——Blogger 正文里有大量撇号（Scotland's / you'll），
+        // 若把 ' 当引号起点，后续整段文本会被误判为"引号内"→ 空格全被删 → 单词粘连。
+        // HTML 属性值一律用双引号包裹，单引号只出现在正文文本里，必须保留。
         var sb = new System.Text.StringBuilder();
-        bool inQuote = false;
-        char quote = '\0';
+        bool inAttr = false;   // 是否在双引号属性值内
         foreach (var c in html)
         {
-            if (inQuote)
+            if (inAttr)
             {
-                if (c == quote) { inQuote = false; sb.Append(c); }
-                else if (!char.IsWhiteSpace(c)) sb.Append(c);   // 引号内：丢所有空白
-                // 换行/空格直接丢弃（URL 折行修复）
+                if (c == '"') { inAttr = false; sb.Append(c); }
+                else if (!char.IsWhiteSpace(c)) sb.Append(c);  // 属性值内：丢空白（修 URL 折行）
             }
             else
             {
-                if (c == '"' || c == '\'') { inQuote = true; quote = c; sb.Append(c); }
-                else sb.Append(c);
+                if (c == '"') { inAttr = true; sb.Append(c); }
+                else sb.Append(c);  // 正文/标签：原样保留（含单引号撇号、单词间空格）
             }
         }
         return sb.ToString();
@@ -276,7 +277,11 @@ public partial class NewsView : UserControl
         // 块级结束/开始 → 换行（保留段落结构）
         t = System.Text.RegularExpressions.Regex.Replace(t,
             @"</?(p|div|ul|ol|li|h[1-6]|blockquote|table|tr|br)\b[^>]*>", "\n");
-        // 删除所有剩余标签（a/img/span/strong 等，含其属性）
+        // 删除所有剩余标签（a/img/span/strong 等，含其属性）。
+        // 关键：若标签**前后都是非空白字符**（word1</span>word2），删标签会粘连成 word1word2，
+        // 此时补一个空格；否则（前后已有空白/行首行尾）不补，避免多余空格。
+        t = System.Text.RegularExpressions.Regex.Replace(t,
+            @"(?<=[^\s<])<[^>]*>(?=[^\s>])", " ");
         t = System.Text.RegularExpressions.Regex.Replace(t, @"<[^>]*>", "");
         // 解码常见实体
         t = t.Replace("&nbsp;", " ").Replace("&amp;", "&")
