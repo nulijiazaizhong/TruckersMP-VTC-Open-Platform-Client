@@ -140,25 +140,60 @@ public partial class NewsView : UserControl
         //    对引号内的内容（属性值/URL）去掉所有空白；引号外的换行转段落换行。
         var norm = NormaliseHtml(html);
 
-        // ② 按 <img> 切分：图片之间的文本段 + 图片本身，按原始顺序排布
-        var imgRegex = new System.Text.RegularExpressions.Regex(
+        // ② 按 <img> 和 <iframe> 切分，按原始顺序排布：
+        //    · <img src> → 真实图片
+        //    · <iframe src=".../widget/{appId}/"> → Steam 商店卡片（异步查 API 渲染）
+        var imgRe = new System.Text.RegularExpressions.Regex(
             @"<img\b[^>]*?\bsrc\s*=\s*([""'])(.*?)\1[^>]*?>",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var iframeRe = new System.Text.RegularExpressions.Regex(
+            @"<iframe\b[^>]*?\bsrc\s*=\s*([""'])(.*?)\1[^>]*?>",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        // 合并两个匹配流，按位置排序
+        var tokens = new List<(int index, int length, string kind, string value)>();
+        foreach (System.Text.RegularExpressions.Match m in imgRe.Matches(norm))
+            tokens.Add((m.Index, m.Length, "img",
+                new string(m.Groups[2].Value.Where(c => !char.IsWhiteSpace(c)).ToArray())));
+        foreach (System.Text.RegularExpressions.Match m in iframeRe.Matches(norm))
+            tokens.Add((m.Index, m.Length, "iframe",
+                new string(m.Groups[2].Value.Where(c => !char.IsWhiteSpace(c)).ToArray())));
+        tokens = tokens.OrderBy(x => x.index).ToList();
 
         var pos = 0;
-        foreach (System.Text.RegularExpressions.Match m in imgRegex.Matches(norm))
+        foreach (var tok in tokens)
         {
-            if (m.Index > pos)
-                AddMarkup(detailBody, norm.Substring(pos, m.Index - pos));
-            // src 值再兜底去空白（防漏网）
-            var src = new string(m.Groups[2].Value.Where(c => !char.IsWhiteSpace(c)).ToArray());
-            // 直接渲染 img 的 src（缩略图 w640-h360 实测可下载 200）。
-            // 不用 <a href> 回退——LastIndexOf(count) 边界易越界崩溃，且缩略图本身有效。
-            AddImage(detailBody, src);
-            pos = m.Index + m.Length;
+            if (tok.index > pos)
+                AddMarkup(detailBody, norm.Substring(pos, tok.index - pos));
+
+            if (tok.kind == "img")
+            {
+                // 图片：直接渲染 src（缩略图 w640-h360 实测 200 可下载）
+                AddImage(detailBody, tok.value);
+            }
+            else // iframe
+            {
+                // Steam 商店 widget：src 形如 https://store.steampowered.com/widget/{appId}/
+                // 提取 AppID → 异步查 Steam API → 渲染商店卡片（封面+名称+价格+购买链接）
+                var appId = ExtractSteamAppId(tok.value);
+                if (appId != null)
+                    AddSteamCard(detailBody, appId);
+                // 非 Steam 的 iframe（如 YouTube embed）：不渲染（避免空白），跳过
+            }
+            pos = tok.index + tok.length;
         }
         if (pos < norm.Length)
             AddMarkup(detailBody, norm.Substring(pos));
+    }
+
+    /// <summary>从 iframe src 提取 Steam AppID（store.steampowered.com/widget/{appId}/）。非 Steam 返回 null。</summary>
+    private static string? ExtractSteamAppId(string src)
+    {
+        if (string.IsNullOrWhiteSpace(src)) return null;
+        var m = System.Text.RegularExpressions.Regex.Match(
+            src, @"store\.steampowered\.com/widget/(\d+)/?",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return m.Success ? m.Groups[1].Value : null;
     }
 
     // 行类型标记：删标签前先替换成不可见标记，删完标签后按标记识别行类型（可靠，不靠回查）
@@ -283,6 +318,132 @@ public partial class NewsView : UserControl
         var spanTag = window.Substring(lastSpan);
         return spanTag.Contains("color", System.StringComparison.OrdinalIgnoreCase)
             && !spanTag.Contains("</span>", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Steam 商店卡片：替代文章里的 Steam widget &lt;iframe&gt;。
+    /// 立即放一个占位 Border，异步查 Steam 公开 API（store.steampowered.com/api/appdetails）
+    /// 拿名称 + 封面 + 价格，渲染成「封面图 + 名称 + 价格 + 在 Steam 查看」卡片。
+    /// </summary>
+    private static void AddSteamCard(Avalonia.Controls.StackPanel host, string appId)
+    {
+        // 占位（异步填充前显示"加载中"）
+        var card = new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x22, 0x2A)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(0x3A, 0x40, 0x4A)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            Margin = new Thickness(0, 4, 0, 14),
+            Padding = new Thickness(10, 8, 10, 8),
+        };
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto, *"), RowDefinitions = new RowDefinitions("*") };
+        // 左：封面（先占位）。Avalonia 11 的 Image 无 CornerRadius，圆角用 Border 包裹。
+        var cover = new Image
+        {
+            Width = 92, Height = 26, Stretch = Stretch.UniformToFill,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 0, 12, 0),
+        };
+        Grid.SetColumn(cover, 0); Grid.SetRow(cover, 0);
+        // 右：名称 + 价格 + 按钮（占位）
+        var right = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        var nameTb = new TextBlock
+        {
+            Text = "Steam 商店加载中…",
+            FontSize = 14, FontWeight = FontWeight.SemiBold,
+            Foreground = new SolidColorBrush(Color.FromRgb(0xEE, 0xEE, 0xEE)),
+        };
+        var priceTb = new TextBlock
+        {
+            Text = "",
+            FontSize = 13,
+            Foreground = new SolidColorBrush(Color.FromRgb(0xB0, 0xC4, 0xD6)),
+            Margin = new Thickness(0, 4, 0, 0),
+        };
+        // "在 Steam 查看" 链接按钮
+        var linkTb = new TextBlock
+        {
+            Text = "在 Steam 上查看 ↗",
+            FontSize = 12,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x66, 0xC0, 0x44)),
+            Margin = new Thickness(0, 6, 0, 0),
+        };
+        // 点击 → 用系统默认浏览器打开 Steam 商店页（Process.Start 跨平台可靠）
+        linkTb.PointerPressed += (s, e) =>
+        {
+            try
+            {
+                var url = $"https://store.steampowered.com/app/{appId}/";
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)
+                { UseShellExecute = true });
+            }
+            catch { }
+        };
+        right.Children.Add(nameTb);
+        right.Children.Add(priceTb);
+        right.Children.Add(linkTb);
+        Grid.SetColumn(right, 1); Grid.SetRow(right, 0);
+        grid.Children.Add(cover);
+        grid.Children.Add(right);
+        card.Child = grid;
+        host.Children.Add(card);
+
+        // 异步查 Steam API 填充
+        _ = LoadSteamCardAsync(cover, nameTb, priceTb, appId);
+    }
+
+    private static async System.Threading.Tasks.Task LoadSteamCardAsync(
+        Image cover, TextBlock nameTb, TextBlock priceTb, string appId)
+    {
+        try
+        {
+            using var http = new System.Net.Http.HttpClient { Timeout = System.TimeSpan.FromSeconds(15) };
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+            var json = await http.GetStringAsync($"https://store.steampowered.com/api/appdetails?appids={appId}&cc=CN");
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty(appId, out var appEl)) return;
+            if (!appEl.TryGetProperty("data", out var data)) return;
+
+            string name = data.TryGetProperty("name", out var n) ? n.GetString() ?? "Steam 应用" : "Steam 应用";
+            string coverUrl = data.TryGetProperty("header_image", out var c) ? c.GetString() ?? "" : "";
+            string price = "";
+            bool isFree = data.TryGetProperty("is_free", out var f) && f.GetBoolean();
+            if (isFree) price = "免费";
+            else if (data.TryGetProperty("price_overview", out var po) && po.TryGetProperty("final_formatted", out var ff))
+                price = ff.GetString() ?? "";
+
+            // 回 UI 线程填充
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                nameTb.Text = name;
+                priceTb.Text = price;
+                priceTb.IsVisible = !string.IsNullOrWhiteSpace(price);
+                if (!string.IsNullOrWhiteSpace(coverUrl) && coverUrl.StartsWith("http"))
+                    _ = LoadSteamCoverAsync(cover, coverUrl);
+            });
+        }
+        catch
+        {
+            // API 失败：保留"加载中"或收起——收起避免误导
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                nameTb.Text = "Steam 商店信息加载失败";
+            });
+        }
+    }
+
+    private static async System.Threading.Tasks.Task LoadSteamCoverAsync(Image cover, string url)
+    {
+        try
+        {
+            using var http = new System.Net.Http.HttpClient { Timeout = System.TimeSpan.FromSeconds(15) };
+            var bytes = await http.GetByteArrayAsync(url);
+            using var ms = new System.IO.MemoryStream(bytes);
+            var bmp = new Avalonia.Media.Imaging.Bitmap(ms);
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => cover.Source = bmp);
+        }
+        catch { /* 封面加载失败：卡片仍显示名称+价格 */ }
     }
 
     /// <summary>
