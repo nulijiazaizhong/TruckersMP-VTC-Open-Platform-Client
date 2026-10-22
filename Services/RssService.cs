@@ -187,10 +187,19 @@ public sealed class RssService
                 }
 
                 // 正文：RSS <description>；Atom <content type='html'> 或 <summary>
+                // 关键：Blogger 的 <content type="html"> 其**文本值是已转义的 HTML 源码**
+                //（&lt;p&gt;&lt;img&gt;…），.Value 取出来是**解码后的真实 HTML**（<p><img> 标签）。
+                // .ToString() 反而会把它重新转义成 &lt;img&gt;（丢失标签结构）——不要用 .ToString()。
+                // rawHtml = .Value（真实 HTML，详情页渲染图片）；body 同源（摘要/纯文本用）。
                 string body = "";
+                string rawHtml = "";
                 var contentEl = item.Elements().FirstOrDefault(e =>
                     e.Name.LocalName is "content" or "summary" or "description");
-                body = contentEl?.Value?.Trim() ?? "";
+                if (contentEl != null)
+                {
+                    body = contentEl.Value?.Trim() ?? "";        // 解码后的真实 HTML
+                    rawHtml = body;                               // 同一份：详情页渲染图片用
+                }
                 if (string.IsNullOrEmpty(body)) body = Local(item, "description");
 
                 // 日期：RSS <pubDate>；Atom <published>/<updated>
@@ -218,7 +227,7 @@ public sealed class RssService
                 if (verMatch.Success) versionTag = verMatch.Groups[1].Value;
 
                 // 清理正文 HTML 标签 + 解码实体（&amp; &lt; &nbsp; 等）
-                // Body：完整正文（保留段落换行，详情页用）；Summary：截断 200 字（列表用）
+                // Body：完整正文（保留段落换行，详情页纯文本回退用）；Summary：截断 200 字（列表用）
                 var full = StripHtml(body, preserveBlocks: true);
                 var summary = StripHtml(body, preserveBlocks: false);
                 if (summary.Length > 200) summary = summary[..200] + "…";
@@ -229,7 +238,9 @@ public sealed class RssService
                     Link = link.Trim(),
                     Summary = string.IsNullOrWhiteSpace(summary) ? null : summary,
                     Body = string.IsNullOrWhiteSpace(full) ? null : full,
-                    RawHtml = string.IsNullOrWhiteSpace(body) ? null : body, // 原始 HTML，详情页渲染图片
+                    // 详情页渲染图片用：完整 HTML（含 <a>/<img> 子元素）。
+                    // 此前误用 body（.Value 纯文本，标签已丢）→ RawHtml 无 <img> → 图片渲染不出来。
+                    RawHtml = string.IsNullOrWhiteSpace(rawHtml) ? null : rawHtml,
                     PublishedAt = date,
                     GameVersionTag = versionTag,
                     Game = game,
@@ -251,11 +262,16 @@ public sealed class RssService
         var t = s;
         if (preserveBlocks)
         {
-            // 块级结束 → 换行；<br> → 换行；列表项 → "• " 前缀
+            // ① 块级开始/结束 → 换行（保留段落结构）
             t = System.Text.RegularExpressions.Regex.Replace(t,
-                @"</?(p|div|ul|ol|h[1-6]|blockquote|table|tr)[^>]*>", "\n");
-            t = System.Text.RegularExpressions.Regex.Replace(t, @"<li[^>]*>", "\n• ");
+                @"</?(p|div|ul|ol|h[1-6]|blockquote|table|tr|section|article)\b[^>]*>", "\n");
+            // ② <br> → 换行
             t = System.Text.RegularExpressions.Regex.Replace(t, @"<br\s*/?>", "\n");
+            // ③ 列表项 → "• " 前缀（在删标签前，保留 <li> 标记）
+            t = System.Text.RegularExpressions.Regex.Replace(t, @"<li[^>]*>", "\n• ");
+            // ④ 删除**所有剩余标签**（a/img/span/strong/iframe 等）——
+            //    关键：此前漏了这步，导致 <a href="..."> 等标签文本残留到正文。
+            t = System.Text.RegularExpressions.Regex.Replace(t, @"<[^>]*>", "");
         }
         else
         {
