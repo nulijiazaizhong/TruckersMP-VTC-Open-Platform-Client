@@ -70,14 +70,23 @@ public partial class NewsView : UserControl
 
     // 点击条目 → 内嵌显示详情（不跳浏览器）；"在浏览器打开"按钮可选跳转原文
     private RssItem? _current;
+    private CancellationTokenSource? _bodyCts;
     private void OnItemPressed(object? sender, PointerPressedEventArgs e)
     {
         if (sender is not Control { Tag: RssItem item }) return;
         _current = item;
+        _bodyCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _bodyCts = cts;
+
         detailTitle.Text = item.Title;
         detailDate.Text = item.DateText;
         detailVersion.Text = string.IsNullOrWhiteSpace(item.GameVersionTag)
             ? "" : $"版本 {item.GameVersionTag}";
+
+        // 用 RSS body 渲染（文本秒显 + 图片异步加载）。
+        // 实测：feed 里的图片 URL 完整正确（缩略图 w640 与原图 s1920 都能 200 下载），
+        // 无需再抓文章页重渲染（那会 Clear 掉正在加载的 Image，反而导致图片不显示）。
         RenderBody(item);
         list.IsVisible = false;
         emptyHint.IsVisible = false;
@@ -233,6 +242,9 @@ public partial class NewsView : UserControl
                 if (bytes.Length == 0) continue;
                 using var ms = new System.IO.MemoryStream(bytes);
                 var bmp = new Avalonia.Media.Imaging.Bitmap(ms);
+                VTC.Client.Logging.Serilog?.Information("[资讯图片] 下载成功 {Size}字节 {Px}x{Py} {Url}",
+                    bytes.Length, bmp.PixelSize.Width, bmp.PixelSize.Height,
+                    u.Length > 70 ? u.Substring(0, 70) + "…" : u);
                 await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     img.Source = bmp;
@@ -240,7 +252,11 @@ public partial class NewsView : UserControl
                 });
                 return; // 成功
             }
-            catch { /* 试下一个候选 */ }
+            catch (Exception ex)
+            {
+                VTC.Client.Logging.Serilog?.Warning("[资讯图片] 下载失败 {Url}: {Ex}",
+                    u.Length > 70 ? u.Substring(0, 70) + "…" : u, ex.Message);
+            }
         }
 
         // 全部失败：收起占位（不留空白）
