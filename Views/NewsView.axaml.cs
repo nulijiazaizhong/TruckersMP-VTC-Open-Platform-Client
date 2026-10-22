@@ -85,9 +85,25 @@ public partial class NewsView : UserControl
             ? "" : $"版本 {item.GameVersionTag}";
 
         // 用 RSS body 渲染（文本秒显 + 图片异步加载）。
-        // 实测：feed 里的图片 URL 完整正确（缩略图 w640 与原图 s1920 都能 200 下载），
-        // 无需再抓文章页重渲染（那会 Clear 掉正在加载的 Image，反而导致图片不显示）。
-        RenderBody(item);
+        // 渲染全程 try/catch：任何解析/索引异常都不允许崩掉整个客户端——
+        // 退化为纯文本详情（之前 FindWrappingAHref 的 LastIndexOf 越界就崩过）。
+        try
+        {
+            RenderBody(item);
+        }
+        catch (Exception ex)
+        {
+            VTC.Client.Logging.Serilog?.Error(ex, "[资讯详情] RenderBody 异常，回退纯文本：{Title}", item.Title);
+            detailBody.Children.Clear();
+            detailBody.Children.Add(new TextBlock
+            {
+                Text = item.DisplayBody,
+                FontSize = 13,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
+                TextWrapping = TextWrapping.Wrap,
+                LineHeight = 22,
+            });
+        }
         list.IsVisible = false;
         emptyHint.IsVisible = false;
         detailPanel.IsVisible = true;
@@ -136,33 +152,13 @@ public partial class NewsView : UserControl
                 AddTextBlock(detailBody, StripHtmlText(norm.Substring(pos, m.Index - pos)));
             // src 值再兜底去空白（防漏网）
             var src = new string(m.Groups[2].Value.Where(c => !char.IsWhiteSpace(c)).ToArray());
-            // 若 img 被 <a href="原图"> 包裹（Blogger 模式：a=原图 s1920, img=缩略图 w640），
-            // 取 a 的 href 作为 fallback——缩略图 404 时回退原图。
-            var fallback = FindWrappingAHref(norm, m.Index);
-            AddImage(detailBody, src, fallback);
+            // 直接渲染 img 的 src（缩略图 w640-h360 实测可下载 200）。
+            // 不用 <a href> 回退——LastIndexOf(count) 边界易越界崩溃，且缩略图本身有效。
+            AddImage(detailBody, src);
             pos = m.Index + m.Length;
         }
         if (pos < norm.Length)
             AddTextBlock(detailBody, StripHtmlText(norm.Substring(pos)));
-    }
-
-    /// <summary>在 pos（&lt;img&gt; 起点）前找最近的 &lt;a href="..."&gt;，返回其 href（去空白）。找不到返回 null。</summary>
-    private static string? FindWrappingAHref(string html, int imgPos)
-    {
-        if (imgPos <= 0) return null;
-        // 向前找最近的 <a ...> 开始标签
-        var aStart = html.LastIndexOf("<a", 0, imgPos, System.StringComparison.OrdinalIgnoreCase);
-        if (aStart < 0) return null;
-        // 该 <a> 之后到 imgPos 之间不应再有其他标签开始（确保 img 直接在其内）
-        var afterA = html.IndexOf('>', aStart);
-        if (afterA < 0) return null;
-        var between = html.Substring(aStart, imgPos - aStart);
-        // 提取 href
-        var m = System.Text.RegularExpressions.Regex.Match(
-            between, @"\bhref\s*=\s*([""'])(.*?)\1", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        if (!m.Success) return null;
-        var href = new string(m.Groups[2].Value.Where(c => !char.IsWhiteSpace(c)).ToArray());
-        return href.StartsWith("http", System.StringComparison.OrdinalIgnoreCase) ? href : null;
     }
 
     /// <summary>
