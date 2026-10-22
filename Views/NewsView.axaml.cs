@@ -149,7 +149,7 @@ public partial class NewsView : UserControl
         foreach (System.Text.RegularExpressions.Match m in imgRegex.Matches(norm))
         {
             if (m.Index > pos)
-                AddTextBlock(detailBody, StripHtmlText(norm.Substring(pos, m.Index - pos)));
+                AddMarkup(detailBody, norm.Substring(pos, m.Index - pos));
             // src 值再兜底去空白（防漏网）
             var src = new string(m.Groups[2].Value.Where(c => !char.IsWhiteSpace(c)).ToArray());
             // 直接渲染 img 的 src（缩略图 w640-h360 实测可下载 200）。
@@ -158,7 +158,131 @@ public partial class NewsView : UserControl
             pos = m.Index + m.Length;
         }
         if (pos < norm.Length)
-            AddTextBlock(detailBody, StripHtmlText(norm.Substring(pos)));
+            AddMarkup(detailBody, norm.Substring(pos));
+    }
+
+    // 行类型标记：删标签前先替换成不可见标记，删完标签后按标记识别行类型（可靠，不靠回查）
+    private const string MARK_LI = "\u0001LI\u0001";     // 列表项
+    private const string MARK_H  = "\u0001H\u0001";       // 标题
+
+    /// <summary>
+    /// 类 Markdown 结构化渲染：把 HTML 段按块级标签切成"行"，每行按类型套用样式——
+    /// · 标题（&lt;h1-6&gt;）→ 加粗 + 强调橙；列表项 &lt;li&gt; → "• " 项目符号 + 左缩进；
+    /// · 普通段落 → 正文样式。changelog 的"分类标题 + 列表"会以清晰 Markdown 层级呈现。
+    /// 用**标记法**识别行类型（删标签前替换 &lt;li&gt;/&lt;hN&gt; 为标记），删完标签后按标记分行。
+    /// </summary>
+    private static void AddMarkup(Avalonia.Controls.StackPanel host, string html)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return;
+
+        var t = html;
+        // ① 删标签前打标记（保留结构信息）
+        t = System.Text.RegularExpressions.Regex.Replace(t,
+            @"<li[^>]*>", MARK_LI, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        t = System.Text.RegularExpressions.Regex.Replace(t,
+            @"<h[1-6]\b[^>]*>", MARK_H, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // 注：changelog 分类标题（Map/Vehicles/Sound/Changelog:）不在此用正则标——
+        // 它们的嵌套结构多变（<p><b><span color>、<div><span color>、<div><p><span color>），
+        // 改用切行后「逐行回查 color 样式」判断（见下方 IsColorHeading），更通用可靠。
+
+        // ② 块级标签 → 换行（切行）。关键：含 </li>——否则相邻 <li> 粘连成一行。
+        t = System.Text.RegularExpressions.Regex.Replace(t,
+            @"</?(p|div|ul|ol|h[1-6]|blockquote|table|tr|section|article|li)\b[^>]*>", "\n");
+        t = System.Text.RegularExpressions.Regex.Replace(t, @"<br\s*/?>", "\n");
+        // ③ 标签边界补空格（防粘连），再删剩余标签
+        t = System.Text.RegularExpressions.Regex.Replace(t, @"(?<=[^\s<])<[^>]*>(?=[^\s>])", " ");
+        t = System.Text.RegularExpressions.Regex.Replace(t, @"<[^>]*>", "");
+        // ④ 解码实体 + 折叠行内空白（保留换行与标记）
+        t = t.Replace("&nbsp;", " ").Replace("&amp;", "&")
+             .Replace("&lt;", "<").Replace("&gt;", ">").Replace("&quot;", "\"").Replace("&#39;", "'");
+        t = System.Text.RegularExpressions.Regex.Replace(t, @"[ \t]+", " ");
+        t = System.Text.RegularExpressions.Regex.Replace(t, @" ?\n ?", "\n");
+        t = System.Text.RegularExpressions.Regex.Replace(t, @"\n{3,}", "\n\n");
+
+        // ⑤ 逐行套 Markdown 风格
+        var accent = new SolidColorBrush(Color.FromRgb(0xF1, 0xC2, 0x32)); // SCS 强调橙 #f1c232
+        var bodyColor = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC));
+
+        foreach (var rawLine in t.Split('\n'))
+        {
+            var isLi = rawLine.Contains(MARK_LI);
+            var line = rawLine.Replace(MARK_LI, "").Replace(MARK_H, "").Trim();
+            if (line.Length == 0) continue;
+            // 标题 = 行带 <hN> 标记，或（短行 且 原始 HTML 该行带 color 样式——changelog 分类标题）
+            var isH = rawLine.Contains(MARK_H) || (!isLi && IsColorHeading(line, html));
+
+            if (isLi)
+            {
+                host.Children.Add(new TextBlock
+                {
+                    Text = "•  " + line,
+                    FontSize = 13,
+                    Foreground = bodyColor,
+                    TextWrapping = TextWrapping.Wrap,
+                    LineHeight = 22,
+                    Margin = new Thickness(18, 2, 0, 2),
+                });
+            }
+            else if (isH)
+            {
+                host.Children.Add(new TextBlock
+                {
+                    Text = line,
+                    FontSize = 14,
+                    FontWeight = FontWeight.SemiBold,
+                    Foreground = accent,
+                    TextWrapping = TextWrapping.Wrap,
+                    LineHeight = 22,
+                    Margin = new Thickness(0, 12, 0, 4),
+                });
+            }
+            else
+            {
+                host.Children.Add(new TextBlock
+                {
+                    Text = line,
+                    FontSize = 13,
+                    Foreground = bodyColor,
+                    TextWrapping = TextWrapping.Wrap,
+                    LineHeight = 22,
+                    Margin = new Thickness(0, 0, 0, 10),
+                });
+            }
+        }
+    }
+
+    /// <summary>
+    /// 判断一行是否为 changelog 分类标题：短行（≤40 字符，排除长段落），
+    /// 且其文本在原始 HTML 中被**带 color 样式的 span** 覆盖。
+    /// 覆盖三种嵌套：&lt;p&gt;&lt;b&gt;&lt;span color&gt;、&lt;div&gt;&lt;span color&gt;、&lt;div&gt;&lt;p&gt;&lt;span color&gt;。
+    /// 用行首特征词回查原始 HTML 上下文窗口，检查窗口内有 color 样式且文本在 span 内。
+    /// </summary>
+    private static bool IsColorHeading(string line, string originalHtml)
+    {
+        if (line.Length == 0 || line.Length > 40) return false;
+        // 短行（如 "Map"）整行作 probe；长行取前 12 字符。
+        // 关键：短词可能在 HTML 多处出现，需**遍历所有匹配**，只要有一个落在带 color 的 span 内即判定为标题。
+        var probe = line.Length <= 12 ? line : line.Substring(0, 12);
+        var from = 0;
+        while (true)
+        {
+            var i = originalHtml.IndexOf(probe, from, System.StringComparison.OrdinalIgnoreCase);
+            if (i < 0) return false;
+            if (IsInsideColorSpan(originalHtml, i)) return true;
+            from = i + 1; // 该匹配不在 color span 内，找下一个
+        }
+    }
+
+    /// <summary>位置 pos 处的文本是否被一个「带 color 样式且尚未闭合」的 &lt;span&gt; 覆盖。</summary>
+    private static bool IsInsideColorSpan(string html, int pos)
+    {
+        var winStart = Math.Max(0, pos - 120);
+        var window = html.Substring(winStart, pos - winStart);
+        var lastSpan = window.LastIndexOf("<span", System.StringComparison.OrdinalIgnoreCase);
+        if (lastSpan < 0) return false;
+        var spanTag = window.Substring(lastSpan);
+        return spanTag.Contains("color", System.StringComparison.OrdinalIgnoreCase)
+            && !spanTag.Contains("</span>", System.StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
