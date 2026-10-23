@@ -32,10 +32,10 @@
   </UserControl.Styles>
 
   <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-    <StackPanel Margin="24,16,24,0">
+    <Grid Margin="24,16,24,0" RowDefinitions="Auto,Auto">
 
-      <!-- ① ② 双列：活动设置 | 服务端设置 -->
-      <Grid ColumnDefinitions="*,18,*">
+      <!-- ① ② 双列：活动设置 | 服务端设置（同一行，顶部对齐） -->
+      <Grid Row="0" ColumnDefinitions="*,18,*">
         <Expander Grid.Column="0" Classes="sec" IsExpanded="True" Header="活动设置">
           <StackPanel>
             <TextBlock Classes="lbl" Text="活动标题"/>
@@ -98,8 +98,8 @@
         </Expander>
       </Grid>
 
-      <!-- ③ 用户管理（全宽，独立一行，不与前两列同行 → 不重叠） -->
-      <Expander Classes="sec" IsExpanded="True" Header="用户管理" Margin="0,16,0,0">
+      <!-- ③ 用户管理（全宽，第二行） -->
+      <Expander Row="1" Classes="sec" IsExpanded="True" Header="用户管理" Margin="0,16,0,0">
         <StackPanel>
           <TextBlock Text="添加 / 删除平台账号。密码默认随机生成（创建时显示一次，之后请用户自行修改）；权限组：Admin / Manager / Driver / Member。"
                      FontSize="12" Foreground="#888" TextWrapping="Wrap" Margin="0,0,0,10"/>
@@ -133,6 +133,6 @@
         </StackPanel>
       </Expander>
 
-    </StackPanel>
+    </Grid>
   </ScrollViewer>
 </UserControl>
