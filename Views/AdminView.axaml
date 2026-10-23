@@ -9,12 +9,12 @@
     <Style Selector="ComboBox.f"><Setter Property="Height" Value="34"/><Setter Property="MinWidth" Value="140"/><Setter Property="VerticalContentAlignment" Value="Center"/></Style>
     <!-- 折叠块：深色卡片式 Expander -->
     <Style Selector="Expander.sec">
-      <Setter Property="Margin" Value="0,0,0,12"/>
       <Setter Property="Background" Value="#141821"/>
       <Setter Property="BorderBrush" Value="#2A303B"/>
       <Setter Property="BorderThickness" Value="1"/>
       <Setter Property="CornerRadius" Value="8"/>
       <Setter Property="Padding" Value="16,12,16,16"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
     </Style>
     <Style Selector="Expander.sec > ToggleButton">
       <Setter Property="Background" Value="Transparent"/>
@@ -29,77 +29,77 @@
     <Style Selector="Expander.sec > ToggleButton:pointerover /template/ ContentPresenter">
       <Setter Property="Background" Value="#1C2230"/>
     </Style>
-    <!-- 展开箭头（▶ 收起 / ▼ 展开）：用模板里 Path 较繁，这里用 header 文本承载，ToggleButton 默认带箭头 -->
   </UserControl.Styles>
 
   <ScrollViewer HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="24,16,24,0">
 
-      <!-- ① 活动设置 -->
-      <Expander Classes="sec" IsExpanded="True" Header="活动设置">
-        <StackPanel>
-          <TextBlock Classes="lbl" Text="活动标题"/>
-          <TextBox x:Name="evtName" Classes="f" Tag=""/>
-          <TextBlock Classes="lbl" Text="活动图片"/>
-          <StackPanel Orientation="Horizontal">
-            <Button Content="上传" Width="80" Height="34" CornerRadius="6"
-                    Background="{DynamicResource vtc_accent}" Foreground="White" Click="OnUploadImageClick"/>
-            <TextBlock x:Name="imgHint" VerticalAlignment="Center" FontSize="12" Foreground="#888"
-                       Text="P1：活动图上传（直传对象存储）"/>
+      <!-- ① ② 双列：活动设置 | 服务端设置 -->
+      <Grid ColumnDefinitions="*,18,*">
+        <Expander Grid.Column="0" Classes="sec" IsExpanded="True" Header="活动设置">
+          <StackPanel>
+            <TextBlock Classes="lbl" Text="活动标题"/>
+            <TextBox x:Name="evtName" Classes="f" Tag=""/>
+            <TextBlock Classes="lbl" Text="活动图片"/>
+            <StackPanel Orientation="Horizontal">
+              <Button Content="上传" Width="80" Height="34" CornerRadius="6"
+                      Background="{DynamicResource vtc_accent}" Foreground="White" Click="OnUploadImageClick"/>
+              <TextBlock x:Name="imgHint" VerticalAlignment="Center" FontSize="12" Foreground="#888"
+                         Text="P1：活动图上传（直传对象存储）"/>
+            </StackPanel>
+            <TextBlock Classes="lbl" Text="活动时间"/>
+            <TextBox x:Name="evtActivityAt" Classes="f" Tag=""/>
+            <TextBlock Classes="lbl" Text="发车时间"/>
+            <TextBox x:Name="evtDepartAt" Classes="f" Tag=""/>
+            <TextBlock Classes="lbl" Text="活动服务器"/>
+            <TextBox x:Name="evtServer" Classes="f" Tag=""/>
+            <TextBlock Classes="lbl" Text="导航方式"/>
+            <TextBox x:Name="evtNav" Classes="f" Tag=""/>
+            <TextBlock Classes="lbl" Text="活动存档"/>
+            <StackPanel Orientation="Horizontal">
+              <Button Content="上传存档" Width="90" Height="34" CornerRadius="6"
+                      Background="{DynamicResource vtc_accent}" Foreground="White" Click="OnUploadSaveClick"/>
+              <TextBlock x:Name="saveHint" VerticalAlignment="Center" FontSize="12" Foreground="#888"
+                         Text="P1：直传 + 发布（publish）"/>
+            </StackPanel>
+            <TextBlock Classes="lbl" Text="requires_map_dlc（豁免不禁的地图包，逗号分隔）"/>
+            <TextBox x:Name="evtRequiresMapDlc" Classes="f" Tag=""/>
+            <Button Content="保存活动" Width="140" Height="38" Margin="0,10,0,0"
+                    Background="{DynamicResource vtc_accent}" Foreground="White" CornerRadius="6"
+                    Click="OnSaveEventClick"/>
+            <TextBlock x:Name="evtStatus" FontSize="12" Foreground="#1B7A43" Margin="0,4,0,0"/>
           </StackPanel>
-          <TextBlock Classes="lbl" Text="活动时间"/>
-          <TextBox x:Name="evtActivityAt" Classes="f" Tag=""/>
-          <TextBlock Classes="lbl" Text="发车时间"/>
-          <TextBox x:Name="evtDepartAt" Classes="f" Tag=""/>
-          <TextBlock Classes="lbl" Text="活动服务器"/>
-          <TextBox x:Name="evtServer" Classes="f" Tag=""/>
-          <TextBlock Classes="lbl" Text="导航方式"/>
-          <TextBox x:Name="evtNav" Classes="f" Tag=""/>
-          <TextBlock Classes="lbl" Text="活动存档"/>
-          <StackPanel Orientation="Horizontal">
-            <Button Content="上传存档" Width="90" Height="34" CornerRadius="6"
-                    Background="{DynamicResource vtc_accent}" Foreground="White" Click="OnUploadSaveClick"/>
-            <TextBlock x:Name="saveHint" VerticalAlignment="Center" FontSize="12" Foreground="#888"
-                       Text="P1：直传 + 发布（publish）"/>
+        </Expander>
+
+        <Expander Grid.Column="2" Classes="sec" IsExpanded="True" Header="服务端设置">
+          <StackPanel>
+            <TextBlock Classes="lbl" Text="存储类型"/>
+            <ComboBox x:Name="storageType" Classes="f" SelectedIndex="0">
+              <ComboBoxItem Content="对象存储（S3 兼容：R2/MinIO/OSS…）"/>
+              <ComboBoxItem Content="仓库（GitHub）"/>
+            </ComboBox>
+            <TextBlock Classes="lbl" Text="存储端点 / 仓库"/>
+            <TextBox x:Name="storageEndpoint" Classes="f" Tag=""/>
+            <TextBlock Classes="lbl" Text="桶 / 分支"/>
+            <TextBox x:Name="storageBucket" Classes="f" Tag=""/>
+            <TextBlock Classes="lbl" Text="应用密钥 ID / token"/>
+            <TextBox x:Name="storageKeyId" Classes="f" Tag=""/>
+            <TextBlock Classes="lbl" Text="应用密钥 / 路径"/>
+            <TextBox x:Name="storageSecret" Classes="f" Tag="" PasswordChar="•"/>
+            <TextBlock Classes="lbl" Text="文件路径前缀 / 权限"/>
+            <TextBox x:Name="storagePrefix" Classes="f" Tag=""/>
+            <Button Content="保存服务端设置" Width="160" Height="38" Margin="0,10,0,0"
+                    Background="{DynamicResource vtc_accent}" Foreground="White" CornerRadius="6"
+                    Click="OnSaveServerClick"/>
+            <TextBlock Text="注：服务端凭据（S3 secret / GitHub token / DB 密码）保存在后端 .env，不在客户端（§2.4 安全规则）。此表单为 P1 可视化配置入口。"
+                       FontSize="12" Foreground="#888" TextWrapping="Wrap" Margin="0,8,0,0"/>
+            <TextBlock x:Name="serverStatus" FontSize="12" Foreground="#1B7A43" Margin="0,4,0,0"/>
           </StackPanel>
-          <TextBlock Classes="lbl" Text="requires_map_dlc（豁免不禁的地图包，逗号分隔）"/>
-          <TextBox x:Name="evtRequiresMapDlc" Classes="f" Tag=""/>
-          <Button Content="保存活动" Width="140" Height="38" Margin="0,10,0,0"
-                  Background="{DynamicResource vtc_accent}" Foreground="White" CornerRadius="6"
-                  Click="OnSaveEventClick"/>
-          <TextBlock x:Name="evtStatus" FontSize="12" Foreground="#1B7A43" Margin="0,4,0,0"/>
-        </StackPanel>
-      </Expander>
+        </Expander>
+      </Grid>
 
-      <!-- ② 服务端设置 -->
-      <Expander Classes="sec" IsExpanded="True" Header="服务端设置">
-        <StackPanel>
-          <TextBlock Classes="lbl" Text="存储类型"/>
-          <ComboBox x:Name="storageType" Classes="f" SelectedIndex="0">
-            <ComboBoxItem Content="对象存储（S3 兼容：R2/MinIO/OSS…）"/>
-            <ComboBoxItem Content="仓库（GitHub）"/>
-          </ComboBox>
-          <TextBlock Classes="lbl" Text="存储端点 / 仓库"/>
-          <TextBox x:Name="storageEndpoint" Classes="f" Tag=""/>
-          <TextBlock Classes="lbl" Text="桶 / 分支"/>
-          <TextBox x:Name="storageBucket" Classes="f" Tag=""/>
-          <TextBlock Classes="lbl" Text="应用密钥 ID / token"/>
-          <TextBox x:Name="storageKeyId" Classes="f" Tag=""/>
-          <TextBlock Classes="lbl" Text="应用密钥 / 路径"/>
-          <TextBox x:Name="storageSecret" Classes="f" Tag="" PasswordChar="•"/>
-          <TextBlock Classes="lbl" Text="文件路径前缀 / 权限"/>
-          <TextBox x:Name="storagePrefix" Classes="f" Tag=""/>
-          <Button Content="保存服务端设置" Width="160" Height="38" Margin="0,10,0,0"
-                  Background="{DynamicResource vtc_accent}" Foreground="White" CornerRadius="6"
-                  Click="OnSaveServerClick"/>
-          <TextBlock Text="注：服务端凭据（S3 secret / GitHub token / DB 密码）保存在后端 .env，不在客户端（§2.4 安全规则）。此表单为 P1 可视化配置入口。"
-                     FontSize="12" Foreground="#888" TextWrapping="Wrap" Margin="0,8,0,0"/>
-          <TextBlock x:Name="serverStatus" FontSize="12" Foreground="#1B7A43" Margin="0,4,0,0"/>
-        </StackPanel>
-      </Expander>
-
-      <!-- ③ 用户管理 -->
-      <Expander Classes="sec" IsExpanded="True" Header="用户管理">
+      <!-- ③ 用户管理（全宽，独立一行，不与前两列同行 → 不重叠） -->
+      <Expander Classes="sec" IsExpanded="True" Header="用户管理" Margin="0,16,0,0">
         <StackPanel>
           <TextBlock Text="添加 / 删除平台账号。密码默认随机生成（创建时显示一次，之后请用户自行修改）；权限组：Admin / Manager / Driver / Member。"
                      FontSize="12" Foreground="#888" TextWrapping="Wrap" Margin="0,0,0,10"/>
