@@ -219,7 +219,13 @@ public sealed class AuthService : IAuthService
         try
         {
             var result = await RefreshAsync(RefreshToken);
-            return result?.AccessToken;
+            if (result != null && !string.IsNullOrWhiteSpace(result.AccessToken))
+                return result.AccessToken;
+            // 刷新返回空 = refresh token 已作废（登出/轮换/过期）：自动登出，
+            // 避免继续用坏 token 反复 401；AuthChanged 会让 Shell 跳回登录页。
+            _log.LogWarning("刷新令牌无效（refresh 返回空），自动登出请重新登录");
+            Logout();
+            return null;
         }
         catch (Exception ex)
         {
