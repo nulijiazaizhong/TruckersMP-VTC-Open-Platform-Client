@@ -76,6 +76,40 @@
                    FontSize="12" Foreground="#888" TextWrapping="Wrap" Margin="0,8,0,0"/>
         <TextBlock x:Name="serverStatus" FontSize="12" Foreground="#1B7A43" Margin="0,4,0,0"/>
       </StackPanel>
+
+      <!-- 底部全宽：用户管理（折叠展开后渲染） -->
+      <StackPanel Grid.Column="0" Grid.ColumnSpan="2" Margin="0,18,0,0">
+        <TextBlock Classes="h" Text="用户管理"/>
+        <TextBlock Text="添加 / 删除平台账号。密码默认随机生成（创建时显示一次，之后请用户自行修改）；权限组：Admin / Manager / Driver / Member。"
+                    FontSize="12" Foreground="#888" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+        <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,8">
+          <TextBlock Text="用户名" VerticalAlignment="Center" FontSize="13"/>
+          <TextBox x:Name="usrUsername" Classes="f" Width="160"/>
+          <TextBlock Text="权限组" VerticalAlignment="Center" FontSize="13"/>
+          <ComboBox x:Name="usrRole" Classes="f" Width="150">
+            <ComboBoxItem Content="Admin（管理员）"/>
+            <ComboBoxItem Content="Manager（管理）"/>
+            <ComboBoxItem Content="Driver（司机）"/>
+            <ComboBoxItem Content="Member（成员）"/>
+          </ComboBox>
+          <TextBlock Text="密码" VerticalAlignment="Center" FontSize="13"/>
+          <TextBox x:Name="usrPassword" Classes="f" Width="200" PasswordChar="•"
+                   ToolTip.Tip="留空 = 自动生成随机密码（推荐）"/>
+          <Button x:Name="btnAddUser" Content="添加用户" Width="96" Height="34" CornerRadius="6"
+                  Background="{DynamicResource vtc_accent}" Foreground="White" Click="OnAddUserClick"/>
+        </StackPanel>
+        <TextBlock x:Name="usrStatus" FontSize="12" Margin="0,4,0,0"/>
+
+        <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,14,0,6">
+          <Button Content="刷新列表" Width="92" Height="30" CornerRadius="6"
+                  Background="{DynamicResource vtc_accent}" Foreground="White" Click="OnRefreshUsersClick"/>
+          <TextBlock x:Name="usrCount" VerticalAlignment="Center" FontSize="12" Foreground="#888"/>
+        </StackPanel>
+        <ScrollViewer MaxHeight="280" HorizontalScrollBarVisibility="Disabled" Margin="0,6,0,0">
+          <StackPanel x:Name="membersList"/>
+        </ScrollViewer>
+      </StackPanel>
     </Grid>
   </ScrollViewer>
 </UserControl>
