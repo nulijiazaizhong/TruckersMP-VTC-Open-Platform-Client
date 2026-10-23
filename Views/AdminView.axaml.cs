@@ -162,29 +162,25 @@ public partial class AdminView : UserControl
         if (string.IsNullOrWhiteSpace(username)) { SetUsrStatus("请输入用户名", false); return; }
         var role = ParseRole(usrRole.SelectedIndex);
 
+        // 密码：留空 = 客户端生成强随机密码（服务端 Rust 要求非空且不自带"空则随机"逻辑，
+        // 响应也不回传密码，故由客户端生成并在成功后一次性显示，告知用户改密）。
+        var typed = usrPassword.Text ?? "";
+        var randomMode = string.IsNullOrEmpty(typed);
+        var password = randomMode ? GenerateRandomPassword(14) : typed;
+
         btnAddUser.IsEnabled = false;
         btnAddUser.Content = "添加中…";
         try
         {
-            // 服务端(Rust) 的 password 字段必填（缺则 422），空串 = 自动生成随机密码。
-            // 故 password 用 ""（不是 null，WhenWritingNull 不会省略它）。
-            var body = new { username, role, password = "" };
+            var body = new { username, role, password };
             // 用 ApiClient（401 自动 refresh 后重试），避免裸请求 token 过期 401
             var json = await _api.PostAsync<string>(VtcApi.Members, body, useAuth: true);
             if (!string.IsNullOrEmpty(json))
             {
-                string? initial = null;
-                try
-                {
-                    var doc = System.Text.Json.JsonDocument.Parse(json);
-                    if (doc.RootElement.TryGetProperty("initialPassword", out var ip))
-                        initial = ip.ValueKind == System.Text.Json.JsonValueKind.String ? ip.GetString() : null;
-                }
-                catch { }
-                // 关键：把生成的初始密码显式展示给用户（仅此一次）
-                SetUsrStatus(initial == null
-                    ? $"✅ 已添加 {username}（{role}）"
-                    : $"✅ 已添加 {username}（{role}），初始密码：{initial} —— 请告知用户登录后立即修改", true);
+                // 关键：随机模式下把生成的初始密码显式展示给用户（仅此一次）
+                SetUsrStatus(randomMode
+                    ? $"✅ 已添加 {username}（{role}），初始密码：{password} —— 请告知用户登录后立即修改"
+                    : $"✅ 已添加 {username}（{role}）", true);
                 usrUsername.Text = "";
                 usrPassword.Text = "";
                 await RefreshUsersAsync();
@@ -290,6 +286,21 @@ public partial class AdminView : UserControl
         2 => "Driver",
         _ => "Member",
     };
+
+    /// <summary>生成强随机初始密码（大小写字母+数字+至少一个符号，长度默认 14）。
+    /// 服务端 Rust 不生成随机密码，故由客户端生成后明文发给服务端（本地/自部署可接受），
+    /// 并一次性显示给管理员转交用户。</summary>
+    private static string GenerateRandomPassword(int length = 14)
+    {
+        const string alpha = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        const string special = "!@#$%^&*";
+        var buf = System.Security.Cryptography.RandomNumberGenerator.GetBytes(length);
+        var sb = new System.Text.StringBuilder(length);
+        foreach (var b in buf) sb.Append(alpha[b % alpha.Length]);
+        // 保证至少一个符号（随机位置）
+        sb[buf[length / 2] % special.Length] = special[buf[length / 2] % special.Length];
+        return sb.ToString();
+    }
 
     private static string TryStr(System.Text.Json.JsonElement e, string field)
     {
