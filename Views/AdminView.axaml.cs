@@ -167,13 +167,14 @@ public partial class AdminView : UserControl
         try
         {
             var body = new { username, role, password = (string?)null }; // password=null → 后端自动生成随机密码
-            var resp = await SendJsonAsync(HttpMethod.Post, VtcApi.Members, body);
-            if (resp != null)
+            // 用 ApiClient（401 自动 refresh 后重试），避免裸请求 token 过期 401
+            var json = await _api.PostAsync<string>(VtcApi.Members, body, useAuth: true);
+            if (!string.IsNullOrEmpty(json))
             {
                 string? initial = null;
                 try
                 {
-                    var doc = System.Text.Json.JsonDocument.Parse(resp);
+                    var doc = System.Text.Json.JsonDocument.Parse(json);
                     if (doc.RootElement.TryGetProperty("initialPassword", out var ip))
                         initial = ip.ValueKind == System.Text.Json.JsonValueKind.String ? ip.GetString() : null;
                 }
@@ -205,7 +206,8 @@ public partial class AdminView : UserControl
         if (_api == null) return;
         try
         {
-            var json = await GetJsonAsync(VtcApi.Members + "?take=200");
+            // 用 ApiClient.GetStringAsync(useAuth:true)：401 自动 refresh（裸请求会 token 过期 401）
+            var json = await _api.GetStringAsync(VtcApi.Members, new Dictionary<string, string?> { ["take"] = "200" }, useAuth: true);
             var doc = System.Text.Json.JsonDocument.Parse(json);
             var listEl = doc.RootElement.TryGetProperty("items", out var it) ? it
                 : (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array ? doc.RootElement : default(System.Text.Json.JsonElement));
@@ -268,7 +270,7 @@ public partial class AdminView : UserControl
             confirm.Close();
             try
             {
-                await SendJsonAsync(new HttpMethod("DELETE"), VtcApi.MemberDetail.Replace("{id}", id), new { });
+                await _api.DeleteAsync<string>(VtcApi.MemberDetail.Replace("{id}", id), useAuth: true);
                 await RefreshUsersAsync();
             }
             catch (Exception ex) { SetUsrStatus("删除失败：" + ex.Message, false); }

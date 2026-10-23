@@ -15,6 +15,7 @@
       <Setter Property="CornerRadius" Value="8"/>
       <Setter Property="Padding" Value="16,12,16,16"/>
       <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="VerticalAlignment" Value="Top"/>
     </Style>
     <Style Selector="Expander.sec > ToggleButton">
       <Setter Property="Background" Value="Transparent"/>
