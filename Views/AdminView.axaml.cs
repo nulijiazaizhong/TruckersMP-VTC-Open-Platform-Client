@@ -166,7 +166,9 @@ public partial class AdminView : UserControl
         btnAddUser.Content = "添加中…";
         try
         {
-            var body = new { username, role, password = (string?)null }; // password=null → 后端自动生成随机密码
+            // 服务端(Rust) 的 password 字段必填（缺则 422），空串 = 自动生成随机密码。
+            // 故 password 用 ""（不是 null，WhenWritingNull 不会省略它）。
+            var body = new { username, role, password = "" };
             // 用 ApiClient（401 自动 refresh 后重试），避免裸请求 token 过期 401
             var json = await _api.PostAsync<string>(VtcApi.Members, body, useAuth: true);
             if (!string.IsNullOrEmpty(json))
