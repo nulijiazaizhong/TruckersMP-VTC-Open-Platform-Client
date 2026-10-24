@@ -173,17 +173,20 @@ public partial class AdminView : UserControl
         try
         {
             var body = new { username, role, password };
-            // 用 ApiClient（401 自动 refresh 后重试），避免裸请求 token 过期 401
-            var json = await _api.PostAsync<string>(VtcApi.Members, body, useAuth: true);
-            if (!string.IsNullOrEmpty(json))
+            // 用 ApiClient（401 自动 refresh 后重试），避免裸请求 token 过期 401。
+            // 注意：Rust 服务端 create_member 成功返回 201 + MemberDto 对象（非纯文本），
+            // 必须按 MemberDto 反序列化；按 string 解析会抛"响应解析失败"把成功误报为失败。
+            var created = await _api.PostAsync<MemberDto>(VtcApi.Members, body, useAuth: true);
+            if (created != null)
             {
-                // 关键：随机模式下把生成的初始密码显式展示给用户（仅此一次）
-                SetUsrStatus(randomMode
-                    ? $"✅ 已添加 {username}（{role}），初始密码：{password} —— 请告知用户登录后立即修改"
-                    : $"✅ 已添加 {username}（{role}）", true);
+                SetUsrStatus($"✅ 已添加 {username}（{role}）", true);
                 usrUsername.Text = "";
                 usrPassword.Text = "";
                 await RefreshUsersAsync();
+                // 随机模式下初始密码仅此一次可见：弹窗展示 + 一键复制（关闭后服务端不回传、无法再取回）
+                if (TopLevel.GetTopLevel(this) is Window owner)
+                    await new InitialPasswordDialog(username, role, randomMode ? password : null)
+                        .ShowDialog(owner);
             }
         }
         catch (Exception ex)

@@ -193,8 +193,9 @@ public partial class AnnouncementCard : ObservableObject
     public bool IsUnread { get; }
     public string Title { get; init; } = "";
     public string PublishedAtText { get; init; } = "";
-    public Brush UnreadDot { get; init; } = new SolidColorBrush(Color.FromRgb(204, 204, 204));
-    public Brush TitleBrush { get; init; } = new SolidColorBrush(Color.FromRgb(34, 34, 34));
+    // 深色主题配色（首页卡片底 #141821）：已读标题次级灰、未读标题亮白+红点
+    public Brush UnreadDot { get; init; } = new SolidColorBrush(Color.FromRgb(62, 68, 80));
+    public Brush TitleBrush { get; init; } = new SolidColorBrush(Color.FromRgb(168, 176, 188));
 
     public AnnouncementCard(AnnouncementDto dto, bool unread)
     {
@@ -205,7 +206,7 @@ public partial class AnnouncementCard : ObservableObject
         if (unread)
         {
             UnreadDot = new SolidColorBrush(Color.FromRgb(229, 57, 53));
-            TitleBrush = new SolidColorBrush(Color.FromRgb(17, 17, 17));
+            TitleBrush = new SolidColorBrush(Color.FromRgb(255, 255, 255));
         }
     }
 }
